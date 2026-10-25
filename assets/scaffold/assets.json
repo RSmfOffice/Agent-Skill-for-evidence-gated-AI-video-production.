@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "assets": [],
+  "continuity": {
+    "geography": "",
+    "screen_direction": "",
+    "axis": "",
+    "lighting": "",
+    "palette": [],
+    "persistent_props": []
+  }
+}

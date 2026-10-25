@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "project_id": "video-project",
+  "title": "Untitled video",
+  "created_at": "",
+  "goal": "",
+  "audience": "",
+  "platform": "",
+  "quality_mode": "hero",
+  "delivery_promise": "",
+  "target_response": "",
+  "clock": {
+    "type": "visual",
+    "source": "",
+    "markers": []
+  },
+  "output": {
+    "path": "renders/final.mp4",
+    "duration_sec": 10,
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "aspect_ratio": "16:9",
+    "container": "mp4",
+    "video_codec": "h264",
+    "color_space": "rec709",
+    "has_audio": true,
+    "audio_codec": "aac",
+    "sample_rate": 48000,
+    "channels": 2,
+    "loudness_target_lufs": null,
+    "true_peak_max_db": null,
+    "captions_required": false
+  },
+  "budget": {
+    "currency": "USD",
+    "cap": null,
+    "spent": 0
+  },
+  "quality": {
+    "thesis": "",
+    "hero_frame": "",
+    "signature_moment": "",
+    "sound_motif": "",
+    "references": [],
+    "anti_references": [],
+    "rubric": {
+      "story": 25,
+      "direction": 20,
+      "motion_continuity": 20,
+      "edit_sound": 20,
+      "delivery": 15
+    }
+  },
+  "rights": {
+    "intended_use": "noncommercial public release",
+    "commercial_use_allowed": false,
+    "ai_disclosure_required": false,
+    "ledger": "rights/asset-ledger.md"
+  },
+  "policy": {
+    "least_stochastic_control": true,
+    "hero_candidate_target": 3,
+    "max_failures_same_cause": 2,
+    "max_candidates_per_shot": 12,
+    "allow_silent_model_fallback": false,
+    "require_human_final_approval": true
+  },
+  "gates": {
+    "brief": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "direction": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "continuity": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "previs": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "generation": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "edit": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "review": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "delivery": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    }
+  }
+}

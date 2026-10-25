@@ -1,0 +1,66 @@
+{
+  "id": "S01",
+  "start_sec": 0.0,
+  "end_sec": 4.0,
+  "editorial": {
+    "function": "hook",
+    "intent": "Establish the product and the problem in one readable action.",
+    "information_delta": "The viewer learns where the product is used and what changes.",
+    "cut_reason": "Cut when the hand releases the old state and attention moves to the product."
+  },
+  "frame": {
+    "shot_size": "medium wide, full hand action visible",
+    "camera_height": "waist height",
+    "angle": "three-quarter frontal",
+    "field_of_view": "about 35 mm full-frame equivalent",
+    "composition": "product right of center with look room left"
+  },
+  "action": {
+    "start": "Hand rests on the old object at frame right.",
+    "primary": "Hand lifts the old object and places the product in the same clear zone.",
+    "end": "Product is centered and fully visible before the cut."
+  },
+  "camera": {
+    "move": "locked camera",
+    "motivation": "Keep the hand contact and product change readable.",
+    "path": "none",
+    "end_frame": "Same framing as the start."
+  },
+  "continuity": {
+    "assets": [
+      "hero-product",
+      "presenter-hands"
+    ],
+    "screen_direction": "action enters from frame right and settles center",
+    "eyeline": "not applicable",
+    "lighting": "soft key camera-left; practical remains behind product",
+    "props": [
+      "old-object"
+    ]
+  },
+  "generation": {
+    "source": "external-video",
+    "control_mode": "image-to-video",
+    "model": "provider/model-version",
+    "status": "planned",
+    "selected_candidate_id": ""
+  },
+  "acceptance": [
+    {
+      "id": "A1",
+      "criterion": "Product geometry and label remain unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "A2",
+      "criterion": "Hands make plausible contact and the object does not teleport.",
+      "blocking": true
+    }
+  ],
+  "review": {
+    "status": "pending",
+    "reviewer": "",
+    "evidence_frames": [],
+    "notes": ""
+  }
+}

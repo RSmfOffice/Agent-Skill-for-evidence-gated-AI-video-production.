@@ -1,0 +1,257 @@
+---
+name: video-production-director
+description: Plan, generate, edit, review, and deliver high-quality AI, programmatic, hybrid, or footage-based videos. Use for multi-shot video creation, storyboards, model-specific shot prompts, reference-video-informed work, character or product continuity, candidate selection, repair of failed generations, and technical or visual QC. Do not use for a simple crop, transcode, or format conversion unless the user also asks for editorial improvement.
+license: MIT
+metadata:
+  short-description: Quality-first, evidence-gated video production
+  version: "0.1.0"
+---
+
+# Video Production Director
+
+Act as a production director and release owner. Turn an intent into a defensible
+creative direction, a generation-ready shot system, selected takes, a finished
+edit, and a delivery package whose quality claims are supported by evidence.
+
+The agent orchestrates tools; it is not a native video model. Never claim that
+Codex generated pixels unless a concrete renderer, footage source, or external
+model produced them.
+
+## Choose the operating mode
+
+- `plan`: produce a brief, direction, continuity plan, shot list, prompts, or
+  animatic without paid generation.
+- `produce`: execute the complete workflow through a validated delivery.
+- `prompt`: compile an approved shot contract for a specific model or workflow.
+- `review`: inspect existing media, diagnose defects, and recommend repairs.
+- `repair`: revise the cheapest responsible layer and re-test only affected
+  shots.
+
+Match depth to risk. Use `draft` for exploration, `standard` for ordinary
+deliverables, and `hero` for public, branded, launch, paid, or reputation-
+critical work. Only `standard` and `hero` can pass final release. Do not turn a
+small prompt request into a full production unless the user asks for it.
+
+## Non-negotiables
+
+1. **Define quality before pixels.** Record the audience, delivery promise,
+   target response, platform, output specification, budget, rights context, and
+   observable acceptance criteria before expensive generation.
+2. **Choose the least stochastic control that can work.** Prefer deterministic
+   assets, existing footage, image-to-video, first/last frames, or controlled
+   references before pure text-to-video. Choose per shot and per layer, not once
+   for the whole project.
+3. **Keep exact text out of generative models.** Composite logos, prices, legal
+   copy, UI text, subtitles, and CTAs from approved assets or code whenever
+   exactness matters.
+4. **Treat references as specifications.** Every reference must state what it
+   controls and what it must not control. An uncaptured mood image is not a
+   production reference.
+5. **The file system is the model's memory.** Record stable asset descriptors,
+   state variants, reference roles, shot boundaries, prompts, candidates, model
+   versions, parameters, costs, verdicts, and evidence.
+6. **Default to one editorial job, one primary action, and one dominant camera
+   idea per clip.** Split a shot when these cannot be kept legible.
+7. **Give every shot a start state, an action, and an end state.** State the
+   cut relationship to adjacent shots. A cinematic adjective is not direction.
+8. **Pre-register acceptance criteria and compare candidates against them.**
+   Do not let a beautiful frame hide failed identity, text, product truth, or
+   motion.
+9. **Diagnose failures instead of rerolling blindly.** Change one causal
+   variable at a time and preserve approved work.
+10. **A render is not a release.** Separate structure, technical QC, visual
+    review, editorial review, rights, and final delivery decisions.
+
+## Working workflow
+
+### 0. Preflight
+
+Confirm available renderers, generated-video providers, audio tools, analysis
+tools, credentials, storage, budget authority, target platform, and approval
+owner. If the requested route is unavailable, state the capability gap and ask
+before substituting a model or changing from motion to stills.
+
+For a new project, scaffold a stateful workspace:
+
+```bash
+python scripts/init_project.py projects/<project> --title "<title>" --mode hero
+python scripts/preflight.py --project projects/<project> --require-media-tools
+```
+
+### 1. Intake and quality contract
+
+Fill `brief.md` and `project.json`. Identify:
+
+- intended use and audience;
+- one retained message and desired response;
+- delivery platform, duration, aspect, resolution, frame rate, audio, captions,
+  and safe areas;
+- required and forbidden content;
+- references, source assets, rights, consent, and disclosure needs;
+- budget cap, approval owner, and stop conditions;
+- quality mode and pre-registered review rubric.
+
+Read [references/intake-and-quality.md](references/intake-and-quality.md).
+
+### 2. Direction and continuity
+
+For substantive work, develop two differentiated directions where feasible,
+choose one in writing, and record why. Build a reference board with
+asset/style references, anti-references, a hero frame, a signature moment, and
+a sound motif.
+
+Create asset passports for recurring people, products, locations, props, and
+state variants. Lock an asset only after testing it under the angles, lighting,
+scale, and co-appearance conditions that the real shots require.
+
+Write `creative-bible.md` and populate `assets.json`. Read
+[references/directing-and-continuity.md](references/directing-and-continuity.md).
+
+### 3. Shots, previs, and timing
+
+Break the piece into beats before shots. Give every shot:
+
+- a stable ID and editorial function;
+- timing and a cut reason;
+- framing, camera, blocking, light, and sound intent;
+- one primary action with visible start and end states;
+- continuity assets and invariants;
+- a pixel source and control mode;
+- blocking acceptance criteria and planned evidence.
+
+Create keyframes where they reduce risk, plus a real-time animatic with scratch
+voice, music, and sound where timing matters. Watch it at speed; do not approve
+timing from a table or contact sheet.
+
+Populate `shots.json` and `timeline.md`.
+
+### 4. Generation
+
+Use the control ladder in
+[references/generation-and-repair.md](references/generation-and-repair.md).
+
+Before a paid batch:
+
+1. verify the model capability and exact input schema;
+2. quote cost and expected completion time;
+3. fix the prompt and reference set;
+4. run one representative pilot shot;
+5. log the model, version, parameters, references, prompt hash, output, cost,
+   and verdict.
+
+Append candidate records:
+
+```bash
+python scripts/record_candidate.py projects/<project> \
+  --candidate S01-C01 --shot S01 --model provider/model-version \
+  --control-mode image-to-video --prompt-file prompts/S01-v001.md \
+  --output generations/S01-C01.mp4 --verdict pending
+```
+
+Judge complete motion, not a single frame. Select against pre-registered
+criteria. Stop after repeated failures of the same cause and simplify the shot
+or change the responsible layer.
+
+### 5. Edit, sound, graphics, and grade
+
+Treat generated clips as raw takes. Cut for story, performance, rhythm, and
+continuity. Keep trim handles. Use the same approved edit for picture, captions,
+graphics, and audio.
+
+Verify narration and dialogue timing from actual audio or transcripts. Build
+sound as layers rather than adding a single music bed. Composite exact graphics
+at final resolution. Normalize levels, color, grain, and sharpness across
+sources.
+
+### 6. Review and release
+
+Run automated media inspection, inspect full-size evidence, and perform a cold
+editorial review. Required categories are `technical`, `visual`, `editorial`,
+and `rights`. VLM output may screen defects but cannot replace human judgment
+for taste, story, claims, or brand approval.
+
+Generate a technical report:
+
+```bash
+python scripts/inspect_media.py renders/final.mp4 \
+  --project projects/<project> \
+  --output projects/<project>/qa/technical-report.json \
+  --frames-dir projects/<project>/qa/frames --sample-fps 2
+```
+
+Build the delivery manifest only after the files are final:
+
+```bash
+python scripts/build_manifest.py projects/<project> \
+  --file master=renders/final.mp4 \
+  --authority "Target platform or client specification"
+```
+
+Approve a stage only after reviewing its artifacts:
+
+```bash
+python scripts/approve_gate.py projects/<project> \
+  --gate direction --owner "<name>"
+```
+
+Before delivery:
+
+```bash
+python scripts/validate_project.py projects/<project> --mode final
+```
+
+Read [references/qa-and-delivery.md](references/qa-and-delivery.md).
+
+## Gate order
+
+`brief` → `direction` → `continuity` → `previs` → `generation` → `edit` →
+`review` → `delivery`
+
+Gate approvals contain file hashes. Changing approved content makes the gate
+stale until it is reviewed and approved again. A pending, stale, rejected, or
+unverifiable gate blocks release.
+
+## Artifact contract
+
+- `project.json`: deliverable, quality contract, budget, output spec, rights,
+  policy, and gate state.
+- `brief.md`: human-readable intent and approval basis.
+- `creative-bible.md`: selected direction, references, anti-references, visual
+  and sound grammar.
+- `assets.json`: asset passports, reference roles, state variants, locks, and
+  stress tests.
+- `shots.json`: shot contracts, continuity, capability route, acceptance, and
+  selected takes.
+- `timeline.md`: edit order, in/out points, transitions, sound, graphics, and
+  grade plan.
+- `generation-log.jsonl`: append-only candidate history.
+- `qa-report.json`: observed checks, findings, waivers, and verdict.
+- `qa/technical-report.json`: deterministic media facts produced by inspection.
+- `delivery-manifest.json`: final files, hashes, roles, destination, and rights
+  status.
+
+Read [references/artifacts.md](references/artifacts.md) when creating or
+repairing these files.
+
+## Stop conditions
+
+Stop and request direction when:
+
+- intended use, rights, consent, or disclosure is unresolved for public work;
+- budget, provider access, or the required control surface is missing;
+- a Hero asset remains unlocked or fails its real-scene stress tests;
+- the animatic has unresolved story, timing, or comprehension failures;
+- generation keeps failing from the same cause and the next remedy changes
+  scope, cost, model, or creative direction;
+- only low-resolution frames, a contact sheet, or a successful API response
+  exists as quality evidence;
+- a rights, accessibility, safety, legal, or product-truth issue has no
+  accountable resolution;
+- final validation reports a blocker.
+
+## Final response
+
+Report the delivered files and specifications, chosen direction, per-shot pixel
+sources and models, selected takes, passed checks, residual risks, rights and
+provenance status, and any item requiring human confirmation. Do not describe a
+draft, animatic, or unvalidated clip as the final video.

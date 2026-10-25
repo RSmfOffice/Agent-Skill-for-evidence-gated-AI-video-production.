@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "review": {
+    "reviewer": "",
+    "date": "",
+    "target": "",
+    "package": "",
+    "human_approved": false
+  },
+  "verdict": "pending",
+  "checks": [],
+  "findings": [],
+  "residual_risks": []
+}

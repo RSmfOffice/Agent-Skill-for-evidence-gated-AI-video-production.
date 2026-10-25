@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "provider": "replace-me",
+  "model": "replace-me",
+  "endpoint_version": "replace-me",
+  "verified_at": "YYYY-MM-DD",
+  "modes": [
+    "image-to-video",
+    "first-last-frame",
+    "reference-conditioned",
+    "text-to-video"
+  ],
+  "duration_sec": {
+    "min": null,
+    "max": null
+  },
+  "aspect_ratios": [],
+  "resolutions": [],
+  "controls": {
+    "first_frame": false,
+    "last_frame": false,
+    "reference_images": 0,
+    "reference_video": false,
+    "reference_audio": false,
+    "seed": false,
+    "negative_prompt": false,
+    "camera_control": false,
+    "native_audio": false
+  },
+  "prompt": {
+    "max_length": null,
+    "syntax": "",
+    "prompt_expansion_can_be_disabled": null
+  },
+  "operations": {
+    "async": true,
+    "schema_discovery": "",
+    "webhook": false,
+    "cancel": false,
+    "output_retention_hours": null
+  },
+  "commercial": {
+    "pricing_basis": "",
+    "charged_on_failure": null,
+    "commercial_use": "verify",
+    "policy_url": ""
+  },
+  "notes": ""
+}
