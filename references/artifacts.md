@@ -38,6 +38,7 @@ Do not store provider credentials in the project.
 Important fields:
 
 - `project_id`, `title`, `goal`, `audience`, `platform`;
+- `producer_id`: accountable production identity;
 - `quality_mode`: `draft`, `standard`, or `hero`;
 - `delivery_promise` and `target_response`;
 - `clock`: summary `type` and source for `visual`, `voiceover`, `music`, or
@@ -47,6 +48,8 @@ Important fields:
 - `budget`: cap, spend, and currency;
 - `quality`: thesis, hero frame, signature moment, sound motif, references, and
   rubric;
+- `content_contract`: required, forbidden, and signature requirements;
+- `motion_contracts`: opt-in spatial, temporal, and physical tests;
 - `rights`: intended use, disclosure, and ledger;
 - `policy`: candidate, retry, and fallback rules;
 - `gates`: approval state and artifact hashes.
@@ -70,6 +73,13 @@ Contains:
 - hero frame, signature moment, and sound motif;
 - palette, light, optics, texture, camera, performance, and edit rules;
 - forbidden drift.
+
+## content_contract and motion_contracts
+
+`project.json` keeps project-specific requirements and optional motion tests.
+The exact schemas and bidirectional requirement/acceptance rules are documented
+in [requirements-and-traceability.md](requirements-and-traceability.md) and
+[motion-contracts.md](motion-contracts.md).
 
 ## script.md
 
@@ -137,6 +147,7 @@ asset fields:
   "references": [
     {
       "path": "assets/product-front.png",
+      "provenance": "preproduction-reference",
       "use": "identity",
       "controls": "silhouette, controls, material",
       "must_not_control": "scene lighting or camera angle"
@@ -146,7 +157,8 @@ asset fields:
     {
       "case": "front at delivery size",
       "result": "pass",
-      "evidence": "qa/assets/product-front.jpg"
+      "evidence": "qa/assets/product-front.jpg",
+      "provenance": "render-test"
     }
   ],
   "rights": "approved-for-this-project"
@@ -154,6 +166,10 @@ asset fields:
 ```
 
 Use `locked` only after required stress tests pass.
+
+For Hero and Critical assets, at least one reference and one passing stress test
+must come from a source other than `observed-final-frame`. See
+[requirements-and-traceability.md](requirements-and-traceability.md).
 
 ## shots.json
 
@@ -166,7 +182,8 @@ Every shot includes:
 - continuity fields;
 - source and control mode;
 - model/prompt/candidate records;
-- acceptance criteria;
+- acceptance criteria with `pass_if`, concrete `fail_if` examples, method, test
+  domain, requirement links, and optional motion-contract links;
 - review status, reviewer, evidence frames, and notes.
 
 Use `approved` only after reviewing motion and cut relationships.
@@ -183,9 +200,11 @@ an explicit visual verdict.
 
 Contains:
 
-- reviewer, date, target, reviewed package, and accountable human approval;
+- reviewer ID, reviewer kind, name, date, target, reviewed package, and human
+  approval;
 - verdict: `pending`, `pass`, `revise`, `reject`, or `waived`;
-- checks with category, criterion, status, reviewer, evidence, and timecode;
+- checks with category, acceptance IDs, method, observed result, status,
+  reviewer, hashed evidence objects, and timecode/region;
 - findings with severity, evidence, impact, fix, owner, and status;
 - residual risks.
 

@@ -45,10 +45,18 @@ class ProjectStateTests(unittest.TestCase):
         path.write_bytes(payload)
         return path
 
+    def evidence(self, relative: str, role: str) -> dict[str, str]:
+        return {
+            "path": relative,
+            "role": role,
+            "sha256": sha256_file(self.root / relative),
+        }
+
     def build_releasable_fixture(self) -> None:
         project = load_json(self.root / "project.json")
         project.update(
             {
+                "producer_id": "production-agent",
                 "goal": "Deliver a controlled two-second product proof.",
                 "audience": "Prospective customers.",
                 "platform": "Local review first, public web second.",
@@ -57,6 +65,50 @@ class ProjectStateTests(unittest.TestCase):
                 "quality_mode": "hero",
             }
         )
+        project["content_contract"] = {
+            "required": [
+                {
+                    "id": "R1",
+                    "observable": "The latch completes one readable state change.",
+                    "blocking": True,
+                    "acceptance_ids": ["A1", "A2", "A3"],
+                }
+            ],
+            "forbidden": [
+                {
+                    "id": "F1",
+                    "observable": "The product geometry must not deform.",
+                    "blocking": True,
+                    "acceptance_ids": ["A1"],
+                }
+            ],
+            "signature_events": [
+                {
+                    "id": "SIG1",
+                    "observable": "The latch action and click are perceptible together.",
+                    "time_window_sec": [0.8, 1.2],
+                    "blocking": True,
+                    "acceptance_ids": ["A2"],
+                }
+            ],
+        }
+        project["motion_contracts"] = [
+            {
+                "id": "M1",
+                "type": "rigid-joint",
+                "subjects": ["latch"],
+                "applies_to_shots": ["S01"],
+                "constraints": {
+                    "length_preserved": True,
+                    "attachment": "latch remains attached to hinge",
+                },
+                "blocking": True,
+                "acceptance_ids": ["A2", "A3"],
+                "evidence": [],
+            }
+        ]
+        project["policy"]["require_independent_review"] = True
+        project["policy"]["require_human_final_approval"] = False
         project["clock"]["source"] = "Visual action timing"
         project["clock"]["markers"] = [{"time_sec": 1.0, "event": "action peak"}]
         project["output"].update(
@@ -218,6 +270,25 @@ class ProjectStateTests(unittest.TestCase):
                 b"frame-" + str(time_value).encode(),
             )
         self.make_file("qa/qa-summary.txt", b"reviewed")
+        self.write_json(
+            "qa/motion-report.json",
+            {
+                "schema_version": 1,
+                "contract_id": "M1",
+                "accepted": True,
+                "observations": [
+                    {
+                        "time_sec": 1.0,
+                        "measurement": "hinge relationship preserved",
+                    }
+                ],
+            },
+        )
+        project = load_json(self.root / "project.json")
+        project["motion_contracts"][0]["evidence"] = [
+            self.evidence("qa/motion-report.json", "render-test")
+        ]
+        self.write_json("project.json", project)
         animatic = self.make_file("animatic/animatic.mp4", b"animatic-fixture")
         animatic_sample_frames = [
             {
@@ -268,6 +339,7 @@ class ProjectStateTests(unittest.TestCase):
                 "references": [
                     {
                         "path": "qa/assets/product-front.jpg",
+                        "provenance": "render-test",
                         "use": "identity",
                         "controls": "geometry, material, latch",
                         "must_not_control": "scene lighting or camera angle",
@@ -278,6 +350,7 @@ class ProjectStateTests(unittest.TestCase):
                         "case": case,
                         "result": "pass",
                         "evidence": f"qa/assets/product-{case}.jpg",
+                        "provenance": "render-test",
                     }
                     for case in ("front", "three-quarter", "detail")
                 ],
@@ -351,9 +424,43 @@ class ProjectStateTests(unittest.TestCase):
                 "acceptance": [
                     {
                         "id": "A1",
-                        "criterion": "Product geometry remains unchanged.",
+                        "pass_if": "Product geometry, material, and latch remain unchanged.",
+                        "fail_if": [
+                            "The product deforms or changes material.",
+                            "The latch detaches from the product.",
+                        ],
+                        "method": "native-crop-sequence",
+                        "test_domain": "visual",
+                        "requirement_ids": ["R1", "F1"],
+                        "motion_contract_ids": [],
                         "blocking": True,
-                    }
+                    },
+                    {
+                        "id": "A2",
+                        "pass_if": "The latch action and click are perceptible at the action peak.",
+                        "fail_if": [
+                            "The action occurs without a perceptible change.",
+                            "The click does not align with the action.",
+                        ],
+                        "method": "motion-audit",
+                        "test_domain": "motion",
+                        "requirement_ids": ["R1", "SIG1"],
+                        "motion_contract_ids": ["M1"],
+                        "blocking": True,
+                    },
+                    {
+                        "id": "A3",
+                        "pass_if": "The latch preserves its rigid relationship with the hinge.",
+                        "fail_if": [
+                            "The latch stretches.",
+                            "The latch separates from the hinge.",
+                        ],
+                        "method": "numeric-test",
+                        "test_domain": "motion",
+                        "requirement_ids": ["R1"],
+                        "motion_contract_ids": ["M1"],
+                        "blocking": True,
+                    },
                 ],
                 "review": {
                     "status": "approved",
@@ -387,11 +494,13 @@ class ProjectStateTests(unittest.TestCase):
 
         qa = load_json(self.root / "qa-report.json")
         qa["review"] = {
+            "reviewer_id": "independent-reviewer",
+            "reviewer_kind": "cold-agent",
             "reviewer": "independent-review",
             "date": "2026-10-25",
             "target": "2s 1920x1080 public proof",
             "package": "state-test-v001",
-            "human_approved": True,
+            "human_approved": False,
         }
         qa["verdict"] = "pass"
         qa["checks"] = [
@@ -399,45 +508,100 @@ class ProjectStateTests(unittest.TestCase):
                 "category": "technical",
                 "status": "pass",
                 "criterion": "The actual file decodes and matches specifications.",
+                "observed": "The measured streams match the output contract.",
                 "reviewer": "inspect_media.py + human",
-                "evidence": ["qa/technical-report.json"],
+                "method": "numeric-test",
+                "acceptance_ids": [],
+                "evidence": [
+                    self.evidence("qa/technical-report.json", "render-test")
+                ],
             },
             {
                 "category": "visual",
                 "status": "pass",
                 "criterion": "Product identity and mechanism are correct.",
+                "observed": "The product silhouette and latch position remain unchanged.",
                 "reviewer": "independent-review",
-                "evidence": ["qa/frames/frame_00001.jpg"],
+                "acceptance_ids": ["A1"],
+                "method": "native-crop-sequence",
+                "region": [700, 250, 700, 700],
+                "evidence": [
+                    self.evidence(
+                        "qa/frames/frame_00001.jpg",
+                        "observed-final-frame",
+                    )
+                ],
+                "time_sec": 1.0,
+            },
+            {
+                "category": "visual",
+                "status": "pass",
+                "criterion": "The latch retains rigid length and attachment.",
+                "observed": "The motion report preserves hinge length through the action.",
+                "reviewer": "motion-test",
+                "acceptance_ids": ["A3"],
+                "method": "numeric-test",
+                "evidence": [
+                    self.evidence("qa/motion-report.json", "render-test")
+                ],
                 "time_sec": 1.0,
             },
             {
                 "category": "editorial",
                 "status": "pass",
                 "criterion": "The action and sound land cleanly.",
+                "observed": "The action completes before the final hold.",
                 "reviewer": "independent-review",
-                "evidence": ["timeline.md"],
+                "method": "human-review",
+                "acceptance_ids": [],
+                "evidence": [
+                    self.evidence("timeline.md", "canonical-source")
+                ],
             },
             {
                 "category": "rights",
                 "status": "pass",
                 "criterion": "All assets are cleared for intended use.",
+                "observed": "The ledger covers all visible and audible assets.",
                 "reviewer": "rights-review",
-                "evidence": ["rights/asset-ledger.md"],
+                "method": "human-review",
+                "acceptance_ids": [],
+                "evidence": [
+                    self.evidence("rights/asset-ledger.md", "canonical-source")
+                ],
             },
             {
                 "category": "audio_visual",
                 "status": "pass",
                 "criterion": "The click lands on the visible mechanism peak.",
+                "observed": "The click occurs at 1.0 seconds with the latch action.",
                 "reviewer": "independent-review",
-                "evidence": ["qa/qa-summary.txt"],
+                "acceptance_ids": ["A2"],
+                "method": "motion-audit",
+                "evidence": [
+                    self.evidence(
+                        "animatic/animatic.mp4",
+                        "observed-final-frame",
+                    )
+                ],
                 "time_sec": 1.0,
             },
             {
                 "category": "content",
                 "status": "pass",
                 "criterion": "The mechanism and product behavior are accurate.",
+                "observed": "The latch changes state without changing the product.",
                 "reviewer": "product-review",
-                "evidence": ["qa/qa-summary.txt"],
+                "acceptance_ids": ["A1"],
+                "method": "native-crop-sequence",
+                "region": [700, 250, 700, 700],
+                "evidence": [
+                    self.evidence(
+                        "qa/frames/frame_00001.jpg",
+                        "observed-final-frame",
+                    )
+                ],
+                "time_sec": 1.0,
             },
         ]
         self.write_json("qa-report.json", qa)
@@ -517,6 +681,9 @@ class ProjectStateTests(unittest.TestCase):
 
     def test_missing_human_approval_blocks_release(self) -> None:
         self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["policy"]["require_human_final_approval"] = True
+        self.write_json("project.json", project)
         qa = load_json(self.root / "qa-report.json")
         qa["review"]["human_approved"] = False
         self.write_json("qa-report.json", qa)
@@ -529,7 +696,8 @@ class ProjectStateTests(unittest.TestCase):
         with self.assertRaises(ProjectError):
             initialize(self.root, "Second Project", "hero")
 
-    def test_v01_project_can_be_upgraded_without_overwriting(self) -> None:
+    def test_legacy_project_can_be_upgraded_without_overwriting(self) -> None:
+        self.build_releasable_fixture()
         for relative in (
             "script.md",
             "master-clock.json",
@@ -540,13 +708,41 @@ class ProjectStateTests(unittest.TestCase):
         project = load_json(self.root / "project.json")
         project["output"].pop("text_required", None)
         project["gates"].pop("script_clock", None)
+        project.pop("producer_id", None)
+        project.pop("content_contract", None)
+        project.pop("motion_contracts", None)
+        project["policy"].pop("require_independent_review", None)
         self.write_json("project.json", project)
+        shots = load_json(self.root / "shots.json")
+        for criterion in shots["shots"][0]["acceptance"]:
+            criterion["criterion"] = criterion["pass_if"]
+            for key in (
+                "pass_if",
+                "fail_if",
+                "method",
+                "test_domain",
+                "requirement_ids",
+                "motion_contract_ids",
+            ):
+                criterion.pop(key, None)
+        self.write_json("shots.json", shots)
+        qa = load_json(self.root / "qa-report.json")
+        qa["review"].pop("reviewer_id", None)
+        qa["review"].pop("reviewer_kind", None)
+        self.write_json("qa-report.json", qa)
 
         result = upgrade(self.root)
+        upgraded = load_json(self.root / "project.json")
         self.assertIn("script.md", result["created"])
-        self.assertIn("script_clock", load_json(self.root / "project.json")["gates"])
-        self.assertFalse(
-            load_json(self.root / "project.json")["output"]["text_required"]
+        self.assertIn("script_clock", upgraded["gates"])
+        self.assertFalse(upgraded["output"]["text_required"])
+        self.assertEqual("0.3.0", upgraded["upgraded_to"])
+        self.assertIn("content_contract", upgraded)
+        self.assertIn("motion_contracts", upgraded)
+        self.assertTrue(result["requires_manual_review"])
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("content_contract needs at least one" in item for item in report.errors)
         )
 
     def test_rate_parser(self) -> None:
@@ -745,6 +941,80 @@ class ProjectStateTests(unittest.TestCase):
         self.write_json("master-clock.json", clock)
         report = validate(self.root, "final")
         self.assertTrue(any("music master clock needs" in item for item in report.errors))
+
+    def test_blocking_content_requirement_needs_acceptance(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["content_contract"]["required"].append(
+            {
+                "id": "R_UNLINKED",
+                "observable": "An unmapped requirement.",
+                "blocking": True,
+                "acceptance_ids": [],
+            }
+        )
+        self.write_json("project.json", project)
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("blocking but has no linked acceptance" in item for item in report.errors)
+        )
+
+    def test_self_review_blocks_standard_release(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["policy"]["require_independent_review"] = True
+        self.write_json("project.json", project)
+        qa = load_json(self.root / "qa-report.json")
+        qa["review"]["reviewer_kind"] = "self"
+        qa["review"]["reviewer_id"] = project["producer_id"]
+        self.write_json("qa-report.json", qa)
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("reviewer independent from the producer" in item for item in report.errors)
+        )
+
+    def test_observed_final_frames_cannot_be_only_asset_evidence(self) -> None:
+        self.build_releasable_fixture()
+        assets = load_json(self.root / "assets.json")
+        for reference in assets["assets"][0]["references"]:
+            reference["provenance"] = "observed-final-frame"
+        for stress in assets["assets"][0]["stress_tests"]:
+            stress["provenance"] = "observed-final-frame"
+        self.write_json("assets.json", assets)
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("provenance is not observed-final-frame" in item for item in report.errors)
+        )
+        self.assertTrue(
+            any("non-final stress test" in item for item in report.errors)
+        )
+
+    def test_motion_contract_requires_evidence(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["motion_contracts"][0]["evidence"] = []
+        self.write_json("project.json", project)
+        report = validate(self.root, "final")
+        self.assertTrue(any("motion_contracts[0] needs evidence" in item for item in report.errors))
+
+    def test_signature_event_needs_located_evidence(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["content_contract"]["signature_events"][0]["time_window_sec"] = [
+            1.5,
+            1.8,
+        ]
+        self.write_json("project.json", project)
+        report = validate(self.root, "final")
+        self.assertTrue(any("signature event SIG1" in item for item in report.errors))
+
+    def test_qa_evidence_hash_mismatch_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        qa = load_json(self.root / "qa-report.json")
+        qa["checks"][0]["evidence"][0]["sha256"] = "0" * 64
+        self.write_json("qa-report.json", qa)
+        report = validate(self.root, "final")
+        self.assertTrue(any("sha256 is stale" in item for item in report.errors))
 
 
 if __name__ == "__main__":

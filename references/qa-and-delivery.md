@@ -58,18 +58,37 @@ Conditional review categories:
 The base final categories are `technical`, `visual`, `editorial`, `rights`, and
 `content`.
 
+Every check that settles a project requirement names its `acceptance_ids`, test
+method, observed result, and hashed evidence. Read
+[requirements-and-traceability.md](requirements-and-traceability.md).
+
 ## Evidence requirements
 
 Every significant quality claim needs evidence:
 
 - source file and SHA-256;
+- acceptance and requirement IDs;
+- test method and test domain;
 - shot or program ID;
 - timecode or frame;
 - artifact path;
 - region or full frame;
 - reviewer and date;
 - criterion and verdict;
+- observed result, not only a status word;
 - severity and repair status.
+
+Evidence entries use a provenance role:
+
+- `preproduction-reference`;
+- `canonical-source`;
+- `render-test`;
+- `observed-final-frame`;
+- `independent-review`.
+
+Final-output frames can prove what the output looks like; they cannot by
+themselves prove that an identity or motion system was controlled before
+production.
 
 For Hero video, inspect:
 
@@ -160,6 +179,11 @@ reason, accepted impact, and date. A waiver does not erase the finding.
 Final validation passes only when:
 
 - all required gates are approved and their hashes are current;
+- every blocking content requirement has linked acceptance and passing QA;
+- every blocking acceptance has located, hashed evidence using its declared
+  method;
+- every signature event has passing evidence inside its declared time window;
+- motion contracts, when declared, have linked acceptance and evidence;
 - the master clock covers the target duration with coherent segments and markers;
 - the animatic decodes, matches the program duration, was watched in real time,
   and has no unresolved blockers;
@@ -171,6 +195,7 @@ Final validation passes only when:
 - required visual, editorial, rights, and accessibility checks passed;
 - no open blocker or major issue remains;
 - every waiver is valid and in a waivable category;
+- the reviewer satisfies the project's independence policy; and
 - the delivery manifest matches the final files byte-for-byte;
 - the final quality mode is `standard` or `hero`.
 
@@ -207,6 +232,7 @@ RIGHTS: PASS / FAIL
 CONTENT: PASS / FAIL
 TEXT: PASS / FAIL / NOT APPLICABLE
 AUDIO_VISUAL: PASS / FAIL / NOT APPLICABLE
+RELEASE LEVEL: RELEASE / PROVISIONAL / AUTOMATED PREVIEW
 
 Delivered files:
 Specifications:

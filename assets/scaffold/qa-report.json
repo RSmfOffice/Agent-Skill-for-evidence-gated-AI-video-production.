@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "review": {
+    "reviewer_id": "",
+    "reviewer_kind": "self",
     "reviewer": "",
     "date": "",
     "target": "",

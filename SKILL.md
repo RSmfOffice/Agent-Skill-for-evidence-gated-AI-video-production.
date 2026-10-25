@@ -4,7 +4,7 @@ description: Plan, generate, edit, review, and deliver high-quality AI, programm
 license: MIT
 metadata:
   short-description: Quality-first, evidence-gated video production
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Video Production Director
@@ -59,9 +59,12 @@ small prompt request into a full production unless the user asks for it.
 8. **Pre-register acceptance criteria and compare candidates against them.**
    Do not let a beautiful frame hide failed identity, text, product truth, or
    motion.
-9. **Diagnose failures instead of rerolling blindly.** Change one causal
+9. **Trace every blocking requirement to acceptance, evidence, and a verdict.**
+   Required content, forbidden outcomes, and signature moments are not satisfied
+   by prose alone.
+10. **Diagnose failures instead of rerolling blindly.** Change one causal
    variable at a time and preserve approved work.
-10. **A render is not a release.** Separate structure, technical QC, visual
+11. **A render is not a release.** Separate structure, technical QC, visual
     review, editorial review, rights, and final delivery decisions.
 
 ## Working workflow
@@ -94,6 +97,9 @@ Fill `brief.md` and `project.json`. Identify:
 - quality mode and pre-registered review rubric.
 
 Read [references/intake-and-quality.md](references/intake-and-quality.md).
+Populate `content_contract` with observable required items, forbidden outcomes,
+and signature events. Read
+[references/requirements-and-traceability.md](references/requirements-and-traceability.md).
 
 ### 2. Direction and continuity
 
@@ -134,6 +140,12 @@ Break the piece into beats before shots. Give every shot:
 - continuity assets and invariants;
 - a pixel source and control mode;
 - blocking acceptance criteria and planned evidence.
+
+Acceptance criteria use `pass_if`, concrete `fail_if` examples, a test method,
+a test domain, and linked requirement IDs. Declare a
+[motion contract](references/motion-contracts.md) when the shot depends on
+contact, rolling, joints, cloth attachment, flow, collision, screen direction,
+or lip sync.
 
 Create keyframes where they reduce risk, plus a real-time animatic with scratch
 voice, music, and sound where timing matters. Watch it at speed; do not approve
@@ -212,6 +224,11 @@ editorial review. Required categories are `technical`, `visual`, `editorial`,
 and `audio_visual` when the program has audio. VLM output may screen defects but
 cannot replace human judgment for taste, story, claims, or brand approval.
 
+QA checks must name the acceptance IDs they settle, state what was actually
+observed, use the declared method, and use hashed evidence objects with a
+provenance role. Every blocking acceptance needs a passing check. Self-review
+cannot pass a project whose policy requires independent review.
+
 For an image-only review pass, generate a contact-sheet overview:
 
 ```bash
@@ -266,7 +283,7 @@ unverifiable gate blocks release.
 ## Artifact contract
 
 - `project.json`: deliverable, quality contract, budget, output spec, rights,
-  policy, and gate state.
+  policy, producer identity, content contract, motion contracts, and gate state.
 - `brief.md`: human-readable intent and approval basis.
 - `creative-bible.md`: selected direction, references, anti-references, visual
   and sound grammar.
@@ -291,15 +308,17 @@ unverifiable gate blocks release.
 Read [references/artifacts.md](references/artifacts.md) when creating or
 repairing these files.
 
-For a project created with `0.1.0`, add missing artifacts and the
-`script_clock` gate without overwriting existing work:
+For a project created with `0.1.0` or `0.2.0`, add missing artifacts and fields
+without overwriting existing work:
 
 ```bash
 python scripts/upgrade_project.py projects/<project>
 ```
 
-The upgrade does not invent script or clock content; those gates remain pending
-until the producer fills and reviews them.
+The upgrade does not invent requirements, stronger acceptance, evidence
+provenance, or independent approval. It leaves those items unresolved and
+invalidates downstream approvals so a legacy project cannot silently pass the
+new release rules.
 
 ## Stop conditions
 
@@ -310,6 +329,11 @@ Stop and request direction when:
 - master-clock segments do not fit the target duration or remain unresolved;
 - the animatic is missing, cannot decode, was not watched in real time, or has
   unresolved story, timing, or comprehension blockers;
+- a blocking requirement has no linked acceptance, or a blocking acceptance has
+  no passing hashed evidence;
+- only final-output frames support a preproduction identity or motion claim;
+- a signature event has no located evidence inside its declared time window;
+- required independent review is satisfied only by the producer;
 - a Hero asset remains unlocked or fails its real-scene stress tests;
 - generation keeps failing from the same cause and the next remedy changes
   scope, cost, model, or creative direction;
@@ -323,5 +347,6 @@ Stop and request direction when:
 
 Report the delivered files and specifications, chosen direction, per-shot pixel
 sources and models, selected takes, passed checks, residual risks, rights and
-provenance status, and any item requiring human confirmation. Do not describe a
-draft, animatic, or unvalidated clip as the final video.
+provenance status, and any item requiring human confirmation. State whether the
+result is automated preview, provisional, or release-approved. Do not describe
+a draft, animatic, or unvalidated clip as the final video.

@@ -2,6 +2,7 @@
   "schema_version": 1,
   "project_id": "video-project",
   "title": "Untitled video",
+  "producer_id": "production-agent",
   "created_at": "",
   "goal": "",
   "audience": "",
@@ -53,6 +54,12 @@
       "delivery": 15
     }
   },
+  "content_contract": {
+    "required": [],
+    "forbidden": [],
+    "signature_events": []
+  },
+  "motion_contracts": [],
   "rights": {
     "intended_use": "noncommercial public release",
     "commercial_use_allowed": false,
@@ -65,6 +72,7 @@
     "max_failures_same_cause": 2,
     "max_candidates_per_shot": 12,
     "allow_silent_model_fallback": false,
+    "require_independent_review": true,
     "require_human_final_approval": true
   },
   "gates": {

@@ -78,8 +78,13 @@ Each shot should include:
 - asset tags and state variants;
 - exact text treatment kept outside generated pixels;
 - audio cue, ambience, dialogue, or silence;
-- acceptance criteria;
+- acceptance criteria with observable pass/fail definitions and a test method;
 - risk level and plausible fallback.
+
+Each blocking acceptance should name concrete `fail_if` examples and link back
+to content requirements. When the claim depends on contact, joints, cloth,
+rolling, flow, collision, screen direction, or lip sync, link a motion contract
+instead of encoding an object-specific rule in the Skill.
 
 Do not use shot-size abbreviations alone. State what is visible, such as "full
 figure with feet and doorway" or "shoulders and head with CTA-safe space."
@@ -114,6 +119,7 @@ Create one passport per reusable asset:
 - canonical descriptor in concrete language;
 - state variants such as wet, open, damaged, or selected;
 - stable reference files;
+- source provenance for every reference;
 - each reference's use, control scope, and forbidden scope;
 - locked invariants;
 - allowed variation;
@@ -143,6 +149,10 @@ require all critical invariants to pass. If budget forces fewer tests, record
 the residual risk. Static tests do not prove video motion; use representative
 motion samples for the most failure-prone action.
 
+Final frames can be evidence of the finished result, but cannot be the only
+reference or stress-test source for an identity claim. Use preproduction
+references, canonical source assets, or pre-final render tests.
+
 ## Sequence continuity
 
 Maintain a sequence-level record of:
@@ -158,6 +168,24 @@ Maintain a sequence-level record of:
 
 The end state of shot A should be a credible start for shot B, or the cut should
 be an intentional discontinuity.
+
+## Motion contracts
+
+Declare a project-specific motion contract only for relationships that matter:
+
+- rolling contact;
+- fixed contact;
+- speed coherence;
+- rigid joints;
+- cloth-root attachment;
+- fluid flow;
+- collision;
+- screen direction;
+- lip sync.
+
+Keep numeric thresholds and object names in the project. The generic contract
+type and evidence requirement belong to the Skill. Read
+[motion-contracts.md](motion-contracts.md).
 
 ## Previs and the edit timeline
 

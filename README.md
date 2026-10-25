@@ -12,7 +12,7 @@ Codex environment.
 A quality-first Agent Skill for planning, generating, editing, reviewing, and
 delivering AI, programmatic, hybrid, or footage-based videos.
 
-Current Skill version: **0.2.0**.
+Current Skill version: **0.3.0**.
 
 Most prompt collections optimize one call. This skill maintains production
 memory across calls: creative direction, asset continuity, shot contracts,
@@ -29,6 +29,12 @@ final delivery.
   expensive generation.
 - Gives every shot an editorial job, one primary action, a camera motivation,
   visible start and end states, and pre-registered acceptance criteria.
+- Traces required, forbidden, and signature content through acceptance, QA, and
+  hashed evidence.
+- Supports generic, opt-in motion contracts for contact, rolling, joints,
+  cloth, flow, collision, screen direction, and lip sync.
+- Records evidence provenance, so final-output frames cannot masquerade as
+  preproduction identity or motion references.
 - Records every candidate's prompt, model, version, references, parameters,
   cost, output hash, and verdict.
 - Separates technical, visual, editorial, and rights review.
@@ -52,10 +58,12 @@ intake
   -> delivery manifest
 ```
 
-The entry skill routes to four focused references:
+The entry skill routes to six focused references:
 
 - `intake-and-quality.md`
+- `requirements-and-traceability.md`
 - `directing-and-continuity.md`
+- `motion-contracts.md`
 - `generation-and-repair.md`
 - `qa-and-delivery.md`
 
@@ -78,9 +86,9 @@ npx skills add <owner>/<repository>
 
 Start a new Codex conversation after installation so the skill is rediscovered.
 
-### Upgrade from 0.1.0
+### Upgrade from 0.1.0 or 0.2.0
 
-Add the new project artifacts and gate without overwriting existing work:
+Add new artifacts and fields without overwriting existing work:
 
 ```bash
 python scripts/upgrade_project.py projects/my-video
@@ -180,7 +188,7 @@ project/
 | Script | Purpose |
 | --- | --- |
 | `init_project.py` | Create the stateful project scaffold |
-| `upgrade_project.py` | Add v0.2.0 artifacts to an existing v0.1.0 project |
+| `upgrade_project.py` | Add v0.3.0 fields/artifacts and invalidate stale approvals |
 | `preflight.py` | Check Python, media tools, project state, and model profiles |
 | `validate_project.py` | Validate planning structure or enforce final release |
 | `approve_gate.py` | Hash stage artifacts and record explicit approval |
@@ -197,6 +205,9 @@ they do not average away blockers.
 
 Rights, consent, accessibility, safety, and legal issues cannot be waived by the
 agent. A successful API request or decodable file is not a release.
+
+Self-review cannot pass a project whose policy requires an independent reviewer.
+Automated results remain previews until their review-independence policy passes.
 
 ## Model profiles
 

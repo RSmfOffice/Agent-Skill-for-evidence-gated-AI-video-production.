@@ -26,6 +26,11 @@ Capture the following in `brief.md` and `project.json`:
 If a field is unknown, mark it unresolved. Do not silently invent a public-use
 right, a factual claim, or a platform requirement.
 
+Translate must-include and must-avoid language into `content_contract` entries
+with stable IDs and observable meanings. Link those IDs to shot acceptance
+criteria before approving direction. See
+[requirements-and-traceability.md](requirements-and-traceability.md).
+
 ## Classify quality mode
 
 - `draft`: exploration or internal preview. A draft may be useful but cannot

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add v0.2.0 project artifacts without overwriting existing work."""
+"""Add v0.3.0 project artifacts without overwriting existing work."""
 
 from __future__ import annotations
 
@@ -58,6 +58,21 @@ def upgrade(project_root: Path) -> dict[str, Any]:
     if not isinstance(output, dict):
         raise ProjectError("project.json has no valid output object")
     output.setdefault("text_required", False)
+    project.setdefault("producer_id", "legacy-project")
+    project.setdefault(
+        "content_contract",
+        {
+            "required": [],
+            "forbidden": [],
+            "signature_events": [],
+        },
+    )
+    project.setdefault("motion_contracts", [])
+    policy = project.get("policy")
+    if not isinstance(policy, dict):
+        policy = {}
+    policy.setdefault("require_independent_review", True)
+    project["policy"] = policy
     duration = output.get("duration_sec")
     clock = project.get("clock")
     clock_type = clock.get("type") if isinstance(clock, dict) else "visual"
@@ -82,7 +97,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         gates = {}
     ordered_gates: dict[str, Any] = {}
     for gate in GATE_ORDER:
-        ordered_gates[gate] = gates.get(
+        state = gates.get(
             gate,
             {
                 "status": "pending",
@@ -91,16 +106,59 @@ def upgrade(project_root: Path) -> dict[str, Any]:
                 "artifacts": {},
             },
         )
+        if (
+            gate != "brief"
+            and isinstance(state, dict)
+            and state.get("status") == "approved"
+        ):
+            history = state.get("history")
+            if not isinstance(history, list):
+                history = []
+            history.append(
+                {
+                    "status": state.get("status"),
+                    "approved_by": state.get("approved_by"),
+                    "approved_at": state.get("approved_at"),
+                    "artifacts": state.get("artifacts", {}),
+                }
+            )
+            state = {
+                "status": "pending",
+                "approved_by": None,
+                "approved_at": None,
+                "artifacts": {},
+                "history": history,
+            }
+        ordered_gates[gate] = state
     project["gates"] = ordered_gates
-    project["upgraded_to"] = "0.2.0"
+    project["upgraded_to"] = "0.3.0"
     project["upgraded_at"] = utc_now()
     write_json_atomic(project_file, project)
+
+    qa_file = project_root / "qa-report.json"
+    if qa_file.is_file():
+        qa = load_json(qa_file)
+        if isinstance(qa, dict):
+            review = qa.get("review")
+            if not isinstance(review, dict):
+                review = {}
+            review.setdefault("reviewer_id", review.get("reviewer") or "legacy-reviewer")
+            review.setdefault("reviewer_kind", "self")
+            review.setdefault("human_approved", False)
+            qa["review"] = review
+            checks = qa.get("checks")
+            if isinstance(checks, list):
+                for check in checks:
+                    if isinstance(check, dict):
+                        check.setdefault("acceptance_ids", [])
+            write_json_atomic(qa_file, qa)
     return {
         "status": "upgraded",
         "project": str(project_root),
         "created": created,
         "text_required": output["text_required"],
         "gate_count": len(ordered_gates),
+        "requires_manual_review": True,
     }
 
 

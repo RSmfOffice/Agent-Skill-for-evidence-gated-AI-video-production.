@@ -148,6 +148,10 @@ Pre-register criteria before seeing outputs:
 - editability;
 - intended-size readability.
 
+When the shot contains an important temporal or physical relationship, judge it
+against the project's [motion contract](motion-contracts.md), not only a visual
+impression.
+
 For Hero shots, generate multiple candidates where budget permits. Use full-size
 evidence and a motion sweep, not one favorite frame. For supporting shots, use
 the minimum candidates needed to satisfy risk.

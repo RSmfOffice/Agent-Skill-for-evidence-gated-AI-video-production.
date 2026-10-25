@@ -48,12 +48,28 @@
   "acceptance": [
     {
       "id": "A1",
-      "criterion": "Product geometry and label remain unchanged.",
+      "pass_if": "Product geometry, material, and visible label remain unchanged.",
+      "fail_if": [
+        "The product geometry changes.",
+        "The visible label or logo becomes deformed."
+      ],
+      "method": "native-crop-sequence",
+      "test_domain": "visual",
+      "requirement_ids": ["REQ-PRODUCT-IDENTITY"],
+      "motion_contract_ids": [],
       "blocking": true
     },
     {
       "id": "A2",
-      "criterion": "Hands make plausible contact and the object does not teleport.",
+      "pass_if": "Hands make plausible contact and the object moves continuously.",
+      "fail_if": [
+        "The object teleports between states.",
+        "A hand intersects or separates from the object unexpectedly."
+      ],
+      "method": "motion-audit",
+      "test_domain": "motion",
+      "requirement_ids": ["REQ-PRODUCT-ACTION"],
+      "motion_contract_ids": ["M-CONTACT"],
       "blocking": true
     }
   ],

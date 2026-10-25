@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,45 @@ CONTROL_MODES = {
 }
 REQUIRED_QA_CATEGORIES = {"technical", "visual", "editorial", "rights", "content"}
 NON_WAIVABLE_CATEGORIES = {"rights", "accessibility", "safety", "legal", "policy"}
+ACCEPTANCE_METHODS = {
+    "native-crop",
+    "native-crop-sequence",
+    "image-sequence",
+    "motion-audit",
+    "numeric-test",
+    "ocr",
+    "transcript",
+    "waveform",
+    "human-review",
+}
+TEST_DOMAINS = {
+    "visual",
+    "motion",
+    "audio",
+    "text",
+    "technical",
+    "content",
+    "rights",
+}
+EVIDENCE_ROLES = {
+    "preproduction-reference",
+    "canonical-source",
+    "render-test",
+    "observed-final-frame",
+    "independent-review",
+}
+MOTION_TYPES = {
+    "rolling-contact",
+    "fixed-contact",
+    "speed-coherence",
+    "rigid-joint",
+    "cloth-root-attachment",
+    "fluid-flow",
+    "collision",
+    "screen-direction",
+    "lip-sync",
+}
+REVIEWER_KINDS = {"self", "cold-agent", "human", "external"}
 
 
 class Report:
@@ -145,6 +185,7 @@ def _validate_project_contract(
     for key, path in (
         ("project_id", "project.project_id"),
         ("title", "project.title"),
+        ("producer_id", "project.producer_id"),
         ("goal", "project.goal"),
         ("audience", "project.audience"),
         ("platform", "project.platform"),
@@ -248,6 +289,7 @@ def _validate_project_contract(
         for key in (
             "least_stochastic_control",
             "allow_silent_model_fallback",
+            "require_independent_review",
             "require_human_final_approval",
         ):
             if not isinstance(policy.get(key), bool):
@@ -720,6 +762,7 @@ def _validate_assets(
                 report.error(f"{prefix}.{key} must be an array")
 
         references = asset.get("references", [])
+        approved_references = 0
         if isinstance(references, list):
             if final and role in {"hero", "critical"} and not references:
                 report.error(f"{prefix} needs at least one approved reference")
@@ -735,6 +778,15 @@ def _validate_assets(
                     report,
                     final,
                 )
+                provenance = reference.get("provenance")
+                if provenance not in EVIDENCE_ROLES:
+                    report.text(
+                        False,
+                        f"{ref_prefix}.provenance is required and must be valid",
+                        final,
+                    )
+                elif provenance != "observed-final-frame":
+                    approved_references += 1
                 for key in ("use", "controls", "must_not_control"):
                     _required_text(
                         reference.get(key),
@@ -745,6 +797,8 @@ def _validate_assets(
 
         stress_tests = asset.get("stress_tests", [])
         passes = 0
+        qualifying_passes = 0
+        stress_evidence_paths: set[str] = set()
         if isinstance(stress_tests, list):
             for test_index, stress in enumerate(stress_tests):
                 test_prefix = f"{prefix}.stress_tests[{test_index}]"
@@ -764,13 +818,24 @@ def _validate_assets(
                     )
                 elif result == "pass":
                     passes += 1
-                    _path_status(
+                    evidence_path = _path_status(
                         project_root,
                         stress.get("evidence"),
                         f"{test_prefix}.evidence",
                         report,
                         final,
                     )
+                    if evidence_path:
+                        stress_evidence_paths.add(str(evidence_path.resolve()))
+                    provenance = stress.get("provenance")
+                    if provenance not in EVIDENCE_ROLES:
+                        report.text(
+                            False,
+                            f"{test_prefix}.provenance is required and must be valid",
+                            final,
+                        )
+                    elif provenance != "observed-final-frame":
+                        qualifying_passes += 1
                 elif result == "not-applicable":
                     _required_text(
                         stress.get("reason"),
@@ -790,6 +855,23 @@ def _validate_assets(
                     f"{prefix} needs {required_passes} passing stress test(s), "
                     f"found {passes}"
                 )
+            if role in {"hero", "critical"} and required_passes:
+                if approved_references == 0:
+                    report.error(
+                        f"{prefix} needs a reference whose provenance is not "
+                        "observed-final-frame"
+                    )
+                if qualifying_passes < required_passes:
+                    report.error(
+                        f"{prefix} needs {required_passes} non-final stress test(s), "
+                        f"found {qualifying_passes}"
+                    )
+            if role == "hero" and quality_mode == "hero" and len(
+                stress_evidence_paths
+            ) < 3:
+                report.error(
+                    f"{prefix} Hero stress tests need at least three distinct evidence files"
+                )
             _required_text(asset.get("rights"), f"{prefix}.rights", report, final)
 
     continuity = assets_document.get("continuity")
@@ -806,19 +888,20 @@ def _validate_stress_structure(
     assets_by_id: dict[str, dict[str, Any]],
     project_root: Path,
     quality_mode: str,
-) -> tuple[set[str], list[dict[str, Any]]]:
+) -> tuple[set[str], list[dict[str, Any]], dict[str, dict[str, Any]]]:
     if shots_document.get("schema_version") != 1:
         report.error("shots.json schema_version must be 1")
     shots = shots_document.get("shots")
     if not isinstance(shots, list):
         report.error("shots.json shots must be an array")
-        return set(), []
+        return set(), [], {}
     if final and not shots:
         report.error("shots.json must contain at least one shot")
 
     used_assets: set[str] = set()
     valid_shots: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    acceptance_by_id: dict[str, dict[str, Any]] = {}
 
     for index, shot in enumerate(shots):
         prefix = f"shots[{index}]"
@@ -960,16 +1043,80 @@ def _validate_stress_structure(
                 if not isinstance(criterion, dict):
                     report.error(f"{criterion_prefix} must be an object")
                     continue
+                acceptance_id = criterion.get("id")
+                if not nonempty_string(acceptance_id):
+                    report.error(f"{criterion_prefix}.id must be a non-empty string")
+                    acceptance_id = None
+                elif acceptance_id in acceptance_by_id:
+                    report.error(f"duplicate acceptance id: {acceptance_id}")
                 _required_text(
-                    criterion.get("criterion"),
-                    f"{criterion_prefix}.criterion",
+                    criterion.get("pass_if"),
+                    f"{criterion_prefix}.pass_if",
                     report,
                     final,
                 )
+                fail_if = criterion.get("fail_if")
+                if not isinstance(fail_if, list) or not fail_if:
+                    report.text(
+                        False,
+                        f"{criterion_prefix}.fail_if should list concrete failures",
+                        final,
+                    )
+                elif any(not nonempty_string(item) for item in fail_if):
+                    report.error(
+                        f"{criterion_prefix}.fail_if entries must be non-empty strings"
+                    )
+                method = criterion.get("method")
+                if method not in ACCEPTANCE_METHODS:
+                    report.text(
+                        False,
+                        f"{criterion_prefix}.method must be a supported test method",
+                        final,
+                    )
+                test_domain = criterion.get("test_domain")
+                if test_domain not in TEST_DOMAINS:
+                    report.text(
+                        False,
+                        f"{criterion_prefix}.test_domain must be a supported domain",
+                        final,
+                    )
+                requirement_ids = criterion.get("requirement_ids", [])
+                if not isinstance(requirement_ids, list) or any(
+                    not nonempty_string(item) for item in requirement_ids
+                ):
+                    report.error(
+                        f"{criterion_prefix}.requirement_ids must be an array of strings"
+                    )
+                    requirement_ids = []
+                motion_contract_ids = criterion.get("motion_contract_ids", [])
+                if not isinstance(motion_contract_ids, list) or any(
+                    not nonempty_string(item) for item in motion_contract_ids
+                ):
+                    report.error(
+                        f"{criterion_prefix}.motion_contract_ids must be an array of strings"
+                    )
+                    motion_contract_ids = []
+                if (
+                    final
+                    and test_domain == "motion"
+                    and not motion_contract_ids
+                ):
+                    report.error(
+                        f"{criterion_prefix} motion tests need motion_contract_ids"
+                    )
                 if not isinstance(criterion.get("blocking"), bool):
                     report.error(f"{criterion_prefix}.blocking must be a boolean")
                 elif criterion["blocking"]:
                     blocking_count += 1
+                if acceptance_id is not None and acceptance_id not in acceptance_by_id:
+                    acceptance_by_id[acceptance_id] = {
+                        "shot_id": shot_id,
+                        "blocking": criterion.get("blocking") is True,
+                        "method": method,
+                        "test_domain": test_domain,
+                        "requirement_ids": requirement_ids,
+                        "motion_contract_ids": motion_contract_ids,
+                    }
             if final and blocking_count == 0:
                 report.error(f"{prefix} needs at least one blocking acceptance criterion")
 
@@ -1070,7 +1217,7 @@ def _validate_stress_structure(
             report.error(
                 f"shots cover {previous_end:.3f}s, expected {output_duration:.3f}s"
             )
-    return used_assets, valid_shots
+    return used_assets, valid_shots, acceptance_by_id
 
 
 def _read_generation_log(project_root: Path, report: Report) -> list[dict[str, Any]]:
@@ -1185,18 +1332,301 @@ def _validate_generation_selection(
                 )
 
 
-def _artifact_paths(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, str)]
-    return []
+def _validate_evidence_list(
+    project_root: Path,
+    value: Any,
+    prefix: str,
+    report: Report,
+    final: bool,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        report.error(f"{prefix} must be an array")
+        return []
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        item_prefix = f"{prefix}[{index}]"
+        if isinstance(item, str):
+            report.text(
+                False,
+                f"{item_prefix} must be an evidence object for release",
+                final,
+            )
+            path = _path_status(
+                project_root,
+                item,
+                f"{item_prefix}.path",
+                report,
+                final,
+            )
+            records.append(
+                {
+                    "path": path,
+                    "relative_path": item,
+                    "role": None,
+                    "sha256": None,
+                }
+            )
+            continue
+        if not isinstance(item, dict):
+            report.error(f"{item_prefix} must be a string or evidence object")
+            continue
+        path_value = item.get("path")
+        path = _path_status(
+            project_root,
+            path_value,
+            f"{item_prefix}.path",
+            report,
+            final,
+        )
+        role = item.get("role")
+        if role not in EVIDENCE_ROLES:
+            report.text(
+                False,
+                f"{item_prefix}.role must be a supported evidence role",
+                final,
+            )
+            role = None
+        expected_hash = item.get("sha256")
+        if not isinstance(expected_hash, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{64}", expected_hash
+        ):
+            report.text(
+                False,
+                f"{item_prefix}.sha256 must be a 64-character SHA-256",
+                final,
+            )
+            expected_hash = None
+        if path and expected_hash and sha256_file(path).lower() != expected_hash.lower():
+            report.error(f"{item_prefix}.sha256 is stale")
+        records.append(
+            {
+                "path": path,
+                "relative_path": str(path_value),
+                "role": role,
+                "sha256": expected_hash,
+            }
+        )
+    return records
+
+
+def _validate_content_contract(
+    project: dict[str, Any],
+    acceptance_by_id: dict[str, dict[str, Any]],
+    report: Report,
+    final: bool,
+) -> None:
+    contract = project.get("content_contract")
+    if not isinstance(contract, dict):
+        report.error("project.content_contract must be an object")
+        return
+
+    output = project.get("output")
+    output_duration = (
+        as_number(output.get("duration_sec")) if isinstance(output, dict) else None
+    )
+    requirement_ids: set[str] = set()
+    requirements_by_id: dict[str, dict[str, Any]] = {}
+    core_requirements = 0
+
+    for section in ("required", "forbidden", "signature_events"):
+        items = contract.get(section)
+        if not isinstance(items, list):
+            report.error(f"content_contract.{section} must be an array")
+            continue
+        if section in {"required", "forbidden"}:
+            core_requirements += len(items)
+        for index, item in enumerate(items):
+            prefix = f"content_contract.{section}[{index}]"
+            if not isinstance(item, dict):
+                report.error(f"{prefix} must be an object")
+                continue
+            requirement_id = item.get("id")
+            if not nonempty_string(requirement_id):
+                report.error(f"{prefix}.id must be a non-empty string")
+                requirement_id = None
+            elif requirement_id in requirement_ids:
+                report.error(f"duplicate content requirement id: {requirement_id}")
+            else:
+                requirement_ids.add(requirement_id)
+            _required_text(
+                item.get("observable"),
+                f"{prefix}.observable",
+                report,
+                final,
+            )
+            if not isinstance(item.get("blocking"), bool):
+                report.error(f"{prefix}.blocking must be a boolean")
+            acceptance_ids = item.get("acceptance_ids")
+            if not isinstance(acceptance_ids, list) or any(
+                not nonempty_string(value) for value in acceptance_ids
+            ):
+                report.error(f"{prefix}.acceptance_ids must be an array of strings")
+                acceptance_ids = []
+            if final and item.get("blocking") is True and not acceptance_ids:
+                report.error(
+                    f"{prefix} is blocking but has no linked acceptance criterion"
+                )
+            linked_blocking_acceptance = False
+            for acceptance_id in acceptance_ids:
+                acceptance = acceptance_by_id.get(acceptance_id)
+                if not acceptance:
+                    report.error(
+                        f"{prefix} references unknown acceptance id {acceptance_id}"
+                    )
+                elif requirement_id and requirement_id not in acceptance["requirement_ids"]:
+                    report.error(
+                        f"acceptance {acceptance_id} does not reference "
+                        f"requirement {requirement_id}"
+                    )
+                elif acceptance.get("blocking"):
+                    linked_blocking_acceptance = True
+            if (
+                final
+                and item.get("blocking") is True
+                and acceptance_ids
+                and not linked_blocking_acceptance
+            ):
+                report.error(
+                    f"{prefix} is blocking but links only non-blocking acceptance"
+                )
+            if section == "signature_events":
+                window = item.get("time_window_sec")
+                if (
+                    not isinstance(window, list)
+                    or len(window) != 2
+                    or any(as_number(value) is None for value in window)
+                    or float(window[0]) < 0
+                    or float(window[1]) <= float(window[0])
+                ):
+                    report.error(
+                        f"{prefix}.time_window_sec must be an increasing [start,end] range"
+                    )
+                elif (
+                    output_duration is not None
+                    and float(window[1]) > output_duration + 0.1
+                ):
+                    report.error(
+                        f"{prefix}.time_window_sec ends after the program duration"
+                    )
+            if requirement_id:
+                requirements_by_id[requirement_id] = item
+
+    if final and core_requirements == 0:
+        report.error(
+            "content_contract needs at least one required or forbidden requirement"
+        )
+
+    for acceptance_id, acceptance in acceptance_by_id.items():
+        for requirement_id in acceptance.get("requirement_ids", []):
+            requirement = requirements_by_id.get(requirement_id)
+            if not requirement:
+                report.error(
+                    f"acceptance {acceptance_id} references unknown requirement "
+                    f"{requirement_id}"
+                )
+            elif acceptance_id not in requirement.get("acceptance_ids", []):
+                report.error(
+                    f"requirement {requirement_id} does not list acceptance "
+                    f"{acceptance_id}"
+                )
+
+
+def _validate_motion_contracts(
+    project: dict[str, Any],
+    project_root: Path,
+    acceptance_by_id: dict[str, dict[str, Any]],
+    report: Report,
+    final: bool,
+) -> None:
+    contracts = project.get("motion_contracts", [])
+    if not isinstance(contracts, list):
+        report.error("project.motion_contracts must be an array")
+        return
+    contracts_by_id: dict[str, dict[str, Any]] = {}
+    known_shots = {
+        acceptance["shot_id"] for acceptance in acceptance_by_id.values()
+    }
+
+    for index, contract in enumerate(contracts):
+        prefix = f"motion_contracts[{index}]"
+        if not isinstance(contract, dict):
+            report.error(f"{prefix} must be an object")
+            continue
+        contract_id = contract.get("id")
+        if not nonempty_string(contract_id):
+            report.error(f"{prefix}.id must be a non-empty string")
+            contract_id = None
+        elif contract_id in contracts_by_id:
+            report.error(f"duplicate motion contract id: {contract_id}")
+        else:
+            contracts_by_id[contract_id] = contract
+        if contract.get("type") not in MOTION_TYPES:
+            report.error(f"{prefix}.type is invalid")
+        subjects = contract.get("subjects")
+        if not isinstance(subjects, list) or not subjects or any(
+            not nonempty_string(value) for value in subjects
+        ):
+            report.error(f"{prefix}.subjects must contain at least one string")
+        applies_to = contract.get("applies_to_shots")
+        if not isinstance(applies_to, list) or not applies_to:
+            report.error(f"{prefix}.applies_to_shots must be a non-empty array")
+        else:
+            for shot_id in applies_to:
+                if shot_id not in known_shots:
+                    report.error(f"{prefix} references unknown shot {shot_id}")
+        if not isinstance(contract.get("constraints"), dict) or not contract.get(
+            "constraints"
+        ):
+            report.error(f"{prefix}.constraints must be a non-empty object")
+        if not isinstance(contract.get("blocking"), bool):
+            report.error(f"{prefix}.blocking must be a boolean")
+        acceptance_ids = contract.get("acceptance_ids")
+        if not isinstance(acceptance_ids, list):
+            report.error(f"{prefix}.acceptance_ids must be an array")
+            acceptance_ids = []
+        if final and contract.get("blocking") is True and not acceptance_ids:
+            report.error(f"{prefix} is blocking but has no linked acceptance")
+        for acceptance_id in acceptance_ids:
+            acceptance = acceptance_by_id.get(acceptance_id)
+            if not acceptance:
+                report.error(
+                    f"{prefix} references unknown acceptance id {acceptance_id}"
+                )
+            elif contract_id not in acceptance.get("motion_contract_ids", []):
+                report.error(
+                    f"acceptance {acceptance_id} does not reference motion contract "
+                    f"{contract_id}"
+                )
+        evidence = _validate_evidence_list(
+            project_root,
+            contract.get("evidence", []),
+            f"{prefix}.evidence",
+            report,
+            final,
+        )
+        if final and not evidence:
+            report.error(f"{prefix} needs evidence")
+
+    for acceptance_id, acceptance in acceptance_by_id.items():
+        for contract_id in acceptance.get("motion_contract_ids", []):
+            contract = contracts_by_id.get(contract_id)
+            if not contract:
+                report.error(
+                    f"acceptance {acceptance_id} references unknown motion contract "
+                    f"{contract_id}"
+                )
+            elif acceptance_id not in contract.get("acceptance_ids", []):
+                report.error(
+                    f"motion contract {contract_id} does not list acceptance "
+                    f"{acceptance_id}"
+                )
 
 
 def _validate_qa(
     project_root: Path,
     project: dict[str, Any],
     qa: dict[str, Any],
+    acceptance_by_id: dict[str, dict[str, Any]],
     report: Report,
     final: bool,
 ) -> None:
@@ -1206,8 +1636,15 @@ def _validate_qa(
     if not isinstance(review, dict):
         report.text(False, "qa-report.json review should be an object", final)
         review = {}
-    for key in ("reviewer", "date", "target"):
+    for key in ("reviewer_id", "reviewer", "date", "target"):
         _required_text(review.get(key), f"qa-report.review.{key}", report, final)
+    reviewer_kind = review.get("reviewer_kind")
+    if reviewer_kind not in REVIEWER_KINDS:
+        report.text(
+            False,
+            "qa-report.review.reviewer_kind must be self, cold-agent, human, or external",
+            final,
+        )
     if qa.get("verdict") not in {"pending", "pass", "revise", "reject", "waived"}:
         report.error("qa-report.verdict is invalid")
     elif final and qa.get("verdict") != "pass":
@@ -1221,6 +1658,9 @@ def _validate_qa(
     evidenced_categories: set[str] = set()
     located_categories: set[str] = set()
     technical_evidence_found = False
+    passed_acceptance: set[str] = set()
+    failed_acceptance: set[str] = set()
+    checks_by_acceptance: dict[str, list[dict[str, Any]]] = {}
     for index, check in enumerate(checks):
         prefix = f"qa-report.checks[{index}]"
         if not isinstance(check, dict):
@@ -1235,22 +1675,70 @@ def _validate_qa(
             report.error(f"{prefix}.status is invalid")
         _required_text(check.get("criterion"), f"{prefix}.criterion", report, final)
         _required_text(check.get("reviewer"), f"{prefix}.reviewer", report, final)
+        _required_text(check.get("observed"), f"{prefix}.observed", report, final)
+        method = check.get("method")
+        if method is not None and method not in ACCEPTANCE_METHODS:
+            report.error(f"{prefix}.method is invalid")
+        acceptance_ids = check.get("acceptance_ids", [])
+        if not isinstance(acceptance_ids, list) or any(
+            not nonempty_string(value) for value in acceptance_ids
+        ):
+            report.error(f"{prefix}.acceptance_ids must be an array of strings")
+            acceptance_ids = []
+        if final and category in {"visual", "content", "text", "audio_visual"}:
+            if not acceptance_ids:
+                report.error(f"{prefix} needs at least one acceptance_id")
+        for acceptance_id in acceptance_ids:
+            acceptance = acceptance_by_id.get(acceptance_id)
+            if not acceptance:
+                report.error(
+                    f"{prefix} references unknown acceptance id {acceptance_id}"
+                )
+                continue
+            checks_by_acceptance.setdefault(acceptance_id, []).append(check)
+            if method is not None and acceptance.get("method") != method:
+                report.error(
+                    f"{prefix}.method does not match acceptance {acceptance_id}"
+                )
+            if status == "pass":
+                passed_acceptance.add(acceptance_id)
+            elif status in {"fail", "not_checked"}:
+                failed_acceptance.add(acceptance_id)
+        if (
+            final
+            and isinstance(method, str)
+            and method.startswith("native-crop")
+        ):
+            region = check.get("region")
+            if (
+                not isinstance(region, list)
+                or len(region) != 4
+                or any(as_number(value) is None for value in region)
+                or float(region[2]) <= 0
+                or float(region[3]) <= 0
+            ):
+                report.error(
+                    f"{prefix}.region must be [x,y,positive width,positive height]"
+                )
+        evidence_records = _validate_evidence_list(
+            project_root,
+            check.get("evidence", []),
+            f"{prefix}.evidence",
+            report,
+            final,
+        )
         if status == "pass":
             passed_categories.add(category)
-            evidence_values = _artifact_paths(check.get("evidence"))
-            if evidence_values:
+            evidence_values = [
+                record["relative_path"]
+                for record in evidence_records
+                if record.get("relative_path")
+            ]
+            if evidence_records:
                 evidenced_categories.add(category)
-            for evidence_index, value in enumerate(evidence_values):
-                _path_status(
-                    project_root,
-                    value,
-                    f"{prefix}.evidence[{evidence_index}]",
-                    report,
-                    final,
-                )
             if category == "technical" and "qa/technical-report.json" in evidence_values:
                 technical_evidence_found = True
-            if evidence_values and (
+            if evidence_records and (
                 as_number(check.get("time_sec")) is not None
                 or nonempty_string(check.get("timecode"))
             ):
@@ -1296,8 +1784,64 @@ def _validate_qa(
                 "qa-report needs located evidence with time_sec or timecode for: "
                 + ", ".join(unlocated)
             )
+        for acceptance_id, acceptance in acceptance_by_id.items():
+            if not acceptance.get("blocking"):
+                continue
+            if acceptance_id not in passed_acceptance:
+                report.error(
+                    f"blocking acceptance {acceptance_id} has no passing QA check"
+                )
+            if acceptance_id in failed_acceptance:
+                report.error(
+                    f"blocking acceptance {acceptance_id} has a failed QA check"
+                )
+        content_contract = project.get("content_contract")
+        signature_events = (
+            content_contract.get("signature_events", [])
+            if isinstance(content_contract, dict)
+            else []
+        )
+        for event in signature_events if isinstance(signature_events, list) else []:
+            if not isinstance(event, dict):
+                continue
+            event_id = str(event.get("id", "signature-event"))
+            window = event.get("time_window_sec")
+            if (
+                not isinstance(window, list)
+                or len(window) != 2
+                or any(as_number(value) is None for value in window)
+            ):
+                continue
+            start, end = float(window[0]), float(window[1])
+            evidence_found = False
+            for acceptance_id in event.get("acceptance_ids", []):
+                for check in checks_by_acceptance.get(acceptance_id, []):
+                    time_value = as_number(check.get("time_sec"))
+                    if (
+                        check.get("status") == "pass"
+                        and check.get("evidence")
+                        and time_value is not None
+                        and start - 0.001 <= time_value <= end + 0.001
+                    ):
+                        evidence_found = True
+                        break
+                if evidence_found:
+                    break
+            if not evidence_found:
+                report.error(
+                    f"signature event {event_id} has no located passing evidence "
+                    "inside its time window"
+                )
         policy = project.get("policy")
+        if isinstance(policy, dict) and policy.get("require_independent_review"):
+            producer_id = project.get("producer_id")
+            if reviewer_kind == "self" or review.get("reviewer_id") == producer_id:
+                report.error(
+                    "final release requires a reviewer independent from the producer"
+                )
         if isinstance(policy, dict) and policy.get("require_human_final_approval"):
+            if reviewer_kind not in {"human", "external"}:
+                report.error("final release requires a human or external reviewer")
             if review.get("human_approved") is not True:
                 report.error("qa-report.review.human_approved must be true")
 
@@ -1579,7 +2123,7 @@ def validate(project_root: Path, mode: str) -> Report:
         quality_mode,
         set(),
     )
-    used_assets, shots = _validate_stress_structure(
+    used_assets, shots, acceptance_by_id = _validate_stress_structure(
         shots_document,
         report,
         final,
@@ -1588,6 +2132,8 @@ def validate(project_root: Path, mode: str) -> Report:
         project_root,
         quality_mode,
     )
+    _validate_content_contract(project, acceptance_by_id, report, final)
+    _validate_motion_contracts(project, project_root, acceptance_by_id, report, final)
     _validate_timeline(project, timeline_document, shots, report, final)
     _validate_animatic(project_root, project, animatic_review, report, final)
 
@@ -1607,13 +2153,27 @@ def validate(project_root: Path, mode: str) -> Report:
     records = _read_generation_log(project_root, report)
     if final:
         _validate_generation_selection(project_root, project, shots, records, report)
-        _validate_qa(project_root, project, qa_report, report, final)
+        _validate_qa(
+            project_root,
+            project,
+            qa_report,
+            acceptance_by_id,
+            report,
+            final,
+        )
         _validate_technical_report(project_root, project, report, final)
         _validate_manifest(project_root, project, delivery_manifest, report, final)
         _validate_gates(project_root, project, report, final)
         _validate_markdown_basis(project_root, report, final)
     else:
-        _validate_qa(project_root, project, qa_report, report, final)
+        _validate_qa(
+            project_root,
+            project,
+            qa_report,
+            acceptance_by_id,
+            report,
+            final,
+        )
 
     return report
 
