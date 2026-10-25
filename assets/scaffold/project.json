@@ -30,7 +30,8 @@
     "channels": 2,
     "loudness_target_lufs": null,
     "true_peak_max_db": null,
-    "captions_required": false
+    "captions_required": false,
+    "text_required": false
   },
   "budget": {
     "currency": "USD",
@@ -74,6 +75,12 @@
       "artifacts": {}
     },
     "direction": {
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null,
+      "artifacts": {}
+    },
+    "script_clock": {
       "status": "pending",
       "approved_by": null,
       "approved_at": null,

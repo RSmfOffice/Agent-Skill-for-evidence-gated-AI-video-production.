@@ -28,6 +28,21 @@ Common editorial functions:
 
 If a shot does not serve one of these jobs, cut it or merge it.
 
+## Script and master clock
+
+Write the script and timing basis before locking shots.
+
+- Choose the governing clock: visual action, voiceover, music, or dialogue.
+- Divide the program into chronological segments with an intentional purpose.
+- For spoken work, estimate or measure actual speech duration.
+- For music, record BPM, sections, accents, and only the key sync points.
+- For visual timing, record action cues, reveals, and transitions.
+- Make the segment budget sum to the target duration.
+
+Music is not automatically the master clock. A voice-led explainer may use music
+under the narration; a dialogue scene may use performance timing; a UI
+demonstration may be picture-led.
+
 ## Build beats before shots
 
 For narrative work, identify:
@@ -143,6 +158,26 @@ Maintain a sequence-level record of:
 
 The end state of shot A should be a credible start for shot B, or the cut should
 be an intentional discontinuity.
+
+## Previs and the edit timeline
+
+Build a low-fidelity animatic before expensive final generation when story
+timing, information order, or cut rhythm carries risk. Use temporary voice,
+music, captions, and placeholder motion as needed, then watch it in real time.
+
+The animatic should reveal:
+
+- order and comprehension;
+- actual total duration;
+- spoken or musical fit;
+- dead air and rushed transitions;
+- caption crowding;
+- missing coverage or a weak emotional landing.
+
+Maintain `timeline.json` as the machine-readable edit. Keep one primary video
+track, required audio tracks, optional caption/graphic tracks, in/out points,
+transitions, and beat markers. `timeline.md` explains why the edit works;
+`timeline.json` defines what the renderer should assemble.
 
 ## Sound and editing
 

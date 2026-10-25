@@ -48,6 +48,16 @@ Run these as separate passes:
 
 Do not combine these into a single "does it look good?" question.
 
+Conditional review categories:
+
+- `text` when captions, exact labels, prices, legal copy, or logos appear;
+- `audio_visual` when the program has speech, music cues, lip sync, or timed SFX;
+- `content` for product truth, factual claims, identity, and story meaning;
+- `accessibility` when captions or accessible media deliverables are required.
+
+The base final categories are `technical`, `visual`, `editorial`, `rights`, and
+`content`.
+
 ## Evidence requirements
 
 Every significant quality claim needs evidence:
@@ -72,6 +82,10 @@ For Hero video, inspect:
 
 A contact sheet is an overview. It cannot pass identity, text, motion, or seam
 quality.
+
+Use `scripts/make_contact_sheet.py` only to navigate a long program or to give an
+image-only reviewer an overview. Full-size individual frames and motion samples
+remain the acceptance evidence.
 
 ## Technical inspection
 
@@ -146,6 +160,11 @@ reason, accepted impact, and date. A waiver does not erase the finding.
 Final validation passes only when:
 
 - all required gates are approved and their hashes are current;
+- the master clock covers the target duration with coherent segments and markers;
+- the animatic decodes, matches the program duration, was watched in real time,
+  and has no unresolved blockers;
+- `timeline.json` has a complete primary video track and required audio,
+  caption, or graphic tracks;
 - all used assets are locked;
 - every shot is approved and has the required native-resolution evidence;
 - technical inspection passed on the actual final file;
@@ -185,6 +204,9 @@ TECHNICAL: PASS / FAIL
 VISUAL: PASS / FAIL
 EDITORIAL: PASS / FAIL
 RIGHTS: PASS / FAIL
+CONTENT: PASS / FAIL
+TEXT: PASS / FAIL / NOT APPLICABLE
+AUDIO_VISUAL: PASS / FAIL / NOT APPLICABLE
 
 Delivered files:
 Specifications:

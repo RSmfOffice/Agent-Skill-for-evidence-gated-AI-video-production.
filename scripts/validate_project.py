@@ -51,7 +51,7 @@ CONTROL_MODES = {
     "edit-only",
     "not-applicable",
 }
-REQUIRED_QA_CATEGORIES = {"technical", "visual", "editorial", "rights"}
+REQUIRED_QA_CATEGORIES = {"technical", "visual", "editorial", "rights", "content"}
 NON_WAIVABLE_CATEGORIES = {"rights", "accessibility", "safety", "legal", "policy"}
 
 
@@ -165,7 +165,7 @@ def _validate_project_contract(
             number = as_number(output.get(key))
             if number is None or number <= 0:
                 report.error(f"project.output.{key} must be a positive number")
-        for key in ("has_audio", "captions_required"):
+        for key in ("has_audio", "captions_required", "text_required"):
             if not isinstance(output.get(key), bool):
                 report.error(f"project.output.{key} must be a boolean")
         if output.get("has_audio") is True:
@@ -279,6 +279,396 @@ def _validate_project_contract(
                 report.error(
                     f"project.gates.{gate}.status must be pending, approved, or rejected"
                 )
+
+
+def _validate_master_clock(
+    project: dict[str, Any],
+    master_clock: dict[str, Any],
+    report: Report,
+    final: bool,
+) -> None:
+    if master_clock.get("schema_version") != 1:
+        report.error("master-clock.json schema_version must be 1")
+
+    clock_type = master_clock.get("type")
+    allowed_types = {"visual", "voiceover", "music", "dialogue"}
+    if clock_type not in allowed_types:
+        report.error(
+            "master-clock.type must be visual, voiceover, music, or dialogue"
+        )
+    project_clock = project.get("clock")
+    if (
+        isinstance(project_clock, dict)
+        and clock_type
+        and project_clock.get("type") != clock_type
+    ):
+        report.error("master-clock.type must match project.clock.type")
+
+    _required_text(
+        master_clock.get("source"),
+        "master-clock.source",
+        report,
+        final,
+    )
+    duration = as_number(master_clock.get("duration_sec"))
+    if duration is None or duration <= 0:
+        report.error("master-clock.duration_sec must be positive")
+        duration = None
+
+    output = project.get("output")
+    output_duration = (
+        as_number(output.get("duration_sec")) if isinstance(output, dict) else None
+    )
+    if (
+        final
+        and duration is not None
+        and output_duration is not None
+        and abs(duration - output_duration) > 0.1
+    ):
+        report.error("master-clock.duration_sec must match project.output.duration_sec")
+
+    if clock_type == "music":
+        bpm = as_number(master_clock.get("bpm"))
+        if bpm is None or bpm <= 0:
+            report.text(False, "music master clock needs a positive bpm", final)
+
+    segments = master_clock.get("segments")
+    if not isinstance(segments, list):
+        report.error("master-clock.segments must be an array")
+        segments = []
+    if final and not segments:
+        report.error("master-clock.segments must not be empty")
+
+    ranges: list[tuple[float, float, str]] = []
+    for index, segment in enumerate(segments):
+        prefix = f"master-clock.segments[{index}]"
+        if not isinstance(segment, dict):
+            report.error(f"{prefix} must be an object")
+            continue
+        segment_id = segment.get("id")
+        _required_text(segment_id, f"{prefix}.id", report, final)
+        _required_text(segment.get("intent"), f"{prefix}.intent", report, final)
+        start = as_number(segment.get("start_sec"))
+        end = as_number(segment.get("end_sec"))
+        if start is None or end is None or start < 0 or end <= start:
+            report.error(f"{prefix} needs numeric 0 <= start_sec < end_sec")
+            continue
+        if duration is not None and end > duration + 0.001:
+            report.error(f"{prefix} ends after the master-clock duration")
+        ranges.append((start, end, str(segment_id)))
+        if clock_type in {"voiceover", "dialogue"} and final:
+            if not nonempty_string(segment.get("text")) and not nonempty_string(
+                segment.get("spoken_text")
+            ):
+                report.error(f"{prefix} needs text or spoken_text")
+
+    ranges.sort(key=lambda item: (item[0], item[1]))
+    previous_end = 0.0
+    previous_name = "clock start"
+    for start, end, name in ranges:
+        if start + 0.001 < previous_end:
+            report.error(f"{name} overlaps {previous_name} in master-clock segments")
+        elif start - previous_end > 0.05:
+            report.text(
+                False,
+                f"master-clock segment gap of {start - previous_end:.3f}s before {name}",
+                final,
+            )
+        previous_end = max(previous_end, end)
+        previous_name = name
+    if final and duration is not None and ranges and abs(previous_end - duration) > 0.1:
+        report.error(
+            f"master-clock segments cover {previous_end:.3f}s, expected {duration:.3f}s"
+        )
+
+    markers = master_clock.get("markers")
+    if not isinstance(markers, list):
+        report.error("master-clock.markers must be an array")
+        markers = []
+    if final and clock_type in {"music", "visual"} and not markers:
+        report.error(f"{clock_type} master clock needs at least one marker")
+    previous_marker = -1.0
+    for index, marker in enumerate(markers):
+        prefix = f"master-clock.markers[{index}]"
+        if not isinstance(marker, dict):
+            report.error(f"{prefix} must be an object")
+            continue
+        marker_time = as_number(marker.get("time_sec"))
+        if marker_time is None or marker_time < 0:
+            report.error(f"{prefix}.time_sec must be non-negative")
+            continue
+        if duration is not None and marker_time > duration + 0.001:
+            report.error(f"{prefix}.time_sec is after the clock duration")
+        if marker_time < previous_marker:
+            report.warn(f"{prefix} is out of chronological order")
+        previous_marker = marker_time
+        for key in ("kind", "label"):
+            _required_text(marker.get(key), f"{prefix}.{key}", report, final)
+
+
+def _validate_timeline(
+    project: dict[str, Any],
+    timeline: dict[str, Any],
+    shots: list[dict[str, Any]],
+    report: Report,
+    final: bool,
+) -> None:
+    if timeline.get("schema_version") != 1:
+        report.error("timeline.json schema_version must be 1")
+
+    output = project.get("output")
+    output_duration = (
+        as_number(output.get("duration_sec")) if isinstance(output, dict) else None
+    )
+    timeline_duration = as_number(timeline.get("duration_sec"))
+    if timeline_duration is None or timeline_duration <= 0:
+        report.error("timeline.duration_sec must be positive")
+        timeline_duration = None
+    if (
+        final
+        and timeline_duration is not None
+        and output_duration is not None
+        and abs(timeline_duration - output_duration) > 0.1
+    ):
+        report.error("timeline.duration_sec must match project output duration")
+
+    known_shots = {
+        str(shot.get("id")) for shot in shots if isinstance(shot, dict) and shot.get("id")
+    }
+    tracks = timeline.get("tracks")
+    if not isinstance(tracks, list):
+        report.error("timeline.tracks must be an array")
+        tracks = []
+    if final and not tracks:
+        report.error("timeline.tracks must not be empty")
+
+    primary_tracks: list[dict[str, Any]] = []
+    has_audio_track = False
+    has_caption_track = False
+    has_graphic_track = False
+    for index, track in enumerate(tracks):
+        prefix = f"timeline.tracks[{index}]"
+        if not isinstance(track, dict):
+            report.error(f"{prefix} must be an object")
+            continue
+        _required_text(track.get("id"), f"{prefix}.id", report, final)
+        track_type = track.get("type")
+        if track_type not in {"video", "audio", "voice", "music", "caption", "graphic"}:
+            report.error(f"{prefix}.type is invalid")
+        role = track.get("role")
+        if role not in {"primary", "overlay", "mix", "reference"}:
+            report.error(f"{prefix}.role is invalid")
+        if track_type == "video" and role == "primary":
+            primary_tracks.append(track)
+        if track_type in {"audio", "voice", "music"}:
+            has_audio_track = True
+        if track_type == "caption":
+            has_caption_track = True
+        if track_type == "graphic":
+            has_graphic_track = True
+
+        items = track.get("items")
+        if not isinstance(items, list):
+            report.error(f"{prefix}.items must be an array")
+            continue
+        for item_index, item in enumerate(items):
+            item_prefix = f"{prefix}.items[{item_index}]"
+            if not isinstance(item, dict):
+                report.error(f"{item_prefix} must be an object")
+                continue
+            _required_text(item.get("id"), f"{item_prefix}.id", report, final)
+            _required_text(item.get("source"), f"{item_prefix}.source", report, final)
+            start = as_number(item.get("timeline_start"))
+            item_duration = as_number(item.get("duration"))
+            if start is None or start < 0:
+                report.error(f"{item_prefix}.timeline_start must be non-negative")
+            if item_duration is None or item_duration <= 0:
+                report.error(f"{item_prefix}.duration must be positive")
+            if (
+                timeline_duration is not None
+                and start is not None
+                and item_duration is not None
+                and start + item_duration > timeline_duration + 0.001
+            ):
+                report.error(f"{item_prefix} ends after the timeline duration")
+            if track_type == "video":
+                shot_id = item.get("shot_id")
+                if not nonempty_string(shot_id):
+                    report.error(f"{item_prefix}.shot_id is required")
+                elif shot_id not in known_shots:
+                    report.error(f"{item_prefix} references unknown shot {shot_id}")
+                source_in = as_number(item.get("source_in"))
+                source_out = as_number(item.get("source_out"))
+                if source_in is None or source_in < 0:
+                    report.error(f"{item_prefix}.source_in must be non-negative")
+                if source_out is None or (
+                    source_in is not None and source_out <= source_in
+                ):
+                    report.error(
+                        f"{item_prefix}.source_out must be greater than source_in"
+                    )
+                _required_text(
+                    item.get("transition"),
+                    f"{item_prefix}.transition",
+                    report,
+                    final,
+                )
+
+    if final and len(primary_tracks) != 1:
+        report.error("timeline needs exactly one primary video track")
+    if final and isinstance(output, dict):
+        if output.get("has_audio") and not has_audio_track:
+            report.error("timeline needs an audio, voice, or music track")
+        if output.get("captions_required") and not has_caption_track:
+            report.error("timeline needs a caption track")
+        if output.get("text_required") and not (has_caption_track or has_graphic_track):
+            report.error("timeline needs a caption or graphic track for required text")
+
+    if primary_tracks and timeline_duration is not None:
+        primary = primary_tracks[0]
+        items = primary.get("items", [])
+        ranges: list[tuple[float, float, str]] = []
+        for index, item in enumerate(items if isinstance(items, list) else []):
+            if not isinstance(item, dict):
+                continue
+            start = as_number(item.get("timeline_start"))
+            item_duration = as_number(item.get("duration"))
+            if start is None or item_duration is None or item_duration <= 0:
+                continue
+            ranges.append(
+                (
+                    start,
+                    start + item_duration,
+                    str(item.get("id", f"item[{index}]")),
+                )
+            )
+        ranges.sort(key=lambda item: (item[0], item[1]))
+        previous_end = 0.0
+        previous_name = "timeline start"
+        for start, end, name in ranges:
+            if start + 0.001 < previous_end:
+                report.error(f"{name} overlaps {previous_name} on the primary track")
+            elif start - previous_end > 0.05:
+                report.text(
+                    False,
+                    f"primary timeline gap of {start - previous_end:.3f}s before {name}",
+                    final,
+                )
+            previous_end = max(previous_end, end)
+            previous_name = name
+        if final and abs(previous_end - timeline_duration) > 0.1:
+            report.error(
+                f"primary timeline covers {previous_end:.3f}s, "
+                f"expected {timeline_duration:.3f}s"
+            )
+
+    beat_markers = timeline.get("beat_markers")
+    if not isinstance(beat_markers, list):
+        report.error("timeline.beat_markers must be an array")
+        beat_markers = []
+    clock = project.get("clock")
+    if (
+        final
+        and isinstance(clock, dict)
+        and clock.get("type") == "music"
+        and not beat_markers
+    ):
+        report.error("music-driven timeline needs beat_markers")
+    for index, marker in enumerate(beat_markers):
+        prefix = f"timeline.beat_markers[{index}]"
+        if not isinstance(marker, dict):
+            report.error(f"{prefix} must be an object")
+            continue
+        marker_time = as_number(marker.get("time_sec"))
+        if marker_time is None or marker_time < 0:
+            report.error(f"{prefix}.time_sec must be non-negative")
+        elif timeline_duration is not None and marker_time > timeline_duration + 0.001:
+            report.error(f"{prefix}.time_sec is after the timeline duration")
+        _required_text(marker.get("label"), f"{prefix}.label", report, final)
+
+
+def _validate_animatic(
+    project_root: Path,
+    project: dict[str, Any],
+    animatic_review: dict[str, Any],
+    report: Report,
+    final: bool,
+) -> None:
+    if animatic_review.get("schema_version") != 1:
+        report.error("qa/animatic-review.json schema_version must be 1")
+    for key in ("reviewer", "reviewed_at"):
+        _required_text(
+            animatic_review.get(key),
+            f"animatic-review.{key}",
+            report,
+            final,
+        )
+    if not isinstance(animatic_review.get("watched_in_real_time"), bool):
+        report.error("animatic-review.watched_in_real_time must be a boolean")
+    elif final and not animatic_review.get("watched_in_real_time"):
+        report.error("animatic must be watched in real time")
+    if animatic_review.get("decision") not in {
+        "pending",
+        "approved",
+        "revise",
+        "rejected",
+    }:
+        report.error("animatic-review.decision is invalid")
+    elif final and animatic_review.get("decision") != "approved":
+        report.error("animatic-review.decision must be approved")
+    for key in ("issues", "unresolved_blockers"):
+        if not isinstance(animatic_review.get(key), list):
+            report.error(f"animatic-review.{key} must be an array")
+    if final and animatic_review.get("unresolved_blockers"):
+        report.error("animatic has unresolved blockers")
+
+    animatic_path = project_root / "animatic" / "animatic.mp4"
+    if not animatic_path.is_file() or animatic_path.stat().st_size == 0:
+        report.text(False, "animatic/animatic.mp4 is missing or empty", final)
+        return
+    if not final:
+        return
+
+    technical_path = project_root / "qa" / "animatic-technical-report.json"
+    if not technical_path.is_file():
+        report.error("qa/animatic-technical-report.json is missing")
+        return
+    try:
+        technical = load_json(technical_path)
+    except ProjectError as exc:
+        report.error(str(exc))
+        return
+    if not isinstance(technical, dict):
+        report.error("qa/animatic-technical-report.json must be an object")
+        return
+    if technical.get("decode_ok") is not True:
+        report.error("animatic technical report indicates a failed decode")
+    if technical.get("inspection_complete") is not True:
+        report.error("animatic technical inspection was not completed")
+    if technical.get("matched_expected") is not True:
+        report.error("animatic technical report does not match the expected duration")
+    if technical.get("source") != "animatic/animatic.mp4":
+        report.error("animatic technical report source must be animatic/animatic.mp4")
+    if technical.get("source_sha256") != sha256_file(animatic_path):
+        report.error("animatic technical report hash is stale")
+    if not technical.get("sample_frames"):
+        report.error("animatic technical report contains no sampled frames")
+    format_info = technical.get("format")
+    report_duration = (
+        as_number(format_info.get("duration_sec"))
+        if isinstance(format_info, dict)
+        else None
+    )
+    output = project.get("output")
+    output_duration = (
+        as_number(output.get("duration_sec")) if isinstance(output, dict) else None
+    )
+    if (
+        report_duration is not None
+        and output_duration is not None
+        and abs(report_duration - output_duration) > 0.1
+    ):
+        report.error("animatic duration does not match the target program duration")
 
 
 def _validate_assets(
@@ -828,8 +1218,9 @@ def _validate_qa(
         report.error("qa-report.checks must be an array")
         checks = []
     passed_categories: set[str] = set()
+    evidenced_categories: set[str] = set()
+    located_categories: set[str] = set()
     technical_evidence_found = False
-    located_visual_evidence = False
     for index, check in enumerate(checks):
         prefix = f"qa-report.checks[{index}]"
         if not isinstance(check, dict):
@@ -847,6 +1238,8 @@ def _validate_qa(
         if status == "pass":
             passed_categories.add(category)
             evidence_values = _artifact_paths(check.get("evidence"))
+            if evidence_values:
+                evidenced_categories.add(category)
             for evidence_index, value in enumerate(evidence_values):
                 _path_status(
                     project_root,
@@ -857,20 +1250,21 @@ def _validate_qa(
                 )
             if category == "technical" and "qa/technical-report.json" in evidence_values:
                 technical_evidence_found = True
-            if (
-                category == "visual"
-                and evidence_values
-                and (
-                    as_number(check.get("time_sec")) is not None
-                    or nonempty_string(check.get("timecode"))
-                )
+            if evidence_values and (
+                as_number(check.get("time_sec")) is not None
+                or nonempty_string(check.get("timecode"))
             ):
-                located_visual_evidence = True
+                located_categories.add(category)
 
     required_categories = set(REQUIRED_QA_CATEGORIES)
     output = project.get("output")
-    if isinstance(output, dict) and output.get("captions_required"):
-        required_categories.add("accessibility")
+    if isinstance(output, dict):
+        if output.get("captions_required"):
+            required_categories.add("accessibility")
+        if output.get("captions_required") or output.get("text_required"):
+            required_categories.add("text")
+        if output.get("has_audio"):
+            required_categories.add("audio_visual")
     if final:
         missing = sorted(required_categories - passed_categories)
         if missing:
@@ -878,14 +1272,29 @@ def _validate_qa(
                 "qa-report has no pass check for required categories: "
                 + ", ".join(missing)
             )
+        unevidenced = sorted(required_categories - evidenced_categories)
+        if unevidenced:
+            report.error(
+                "qa-report has no evidence-backed pass check for: "
+                + ", ".join(unevidenced)
+            )
         if not technical_evidence_found:
             report.error(
                 "qa-report needs a passing technical check citing "
                 "qa/technical-report.json"
             )
-        if not located_visual_evidence:
+        locator_categories = {"visual", "audio_visual"}
+        if output.get("captions_required") or output.get("text_required"):
+            locator_categories.add("text")
+        unlocated = sorted(
+            category
+            for category in locator_categories & required_categories
+            if category not in located_categories
+        )
+        if unlocated:
             report.error(
-                "qa-report needs located visual evidence with time_sec or timecode"
+                "qa-report needs located evidence with time_sec or timecode for: "
+                + ", ".join(unlocated)
             )
         policy = project.get("policy")
         if isinstance(policy, dict) and policy.get("require_human_final_approval"):
@@ -1103,6 +1512,7 @@ def _validate_markdown_basis(project_root: Path, report: Report, final: bool) ->
     minimums = {
         "brief.md": 180,
         "creative-bible.md": 350,
+        "script.md": 180,
         "timeline.md": 120,
         "qa/previs-review.md": 80,
         "rights/asset-ledger.md": 40,
@@ -1126,8 +1536,11 @@ def validate(project_root: Path, mode: str) -> Report:
 
     try:
         project = load_json(project_root / "project.json")
+        master_clock = load_json(project_root / "master-clock.json")
         assets_document = load_json(project_root / "assets.json")
         shots_document = load_json(project_root / "shots.json")
+        timeline_document = load_json(project_root / "timeline.json")
+        animatic_review = load_json(project_root / "qa" / "animatic-review.json")
         qa_report = load_json(project_root / "qa-report.json")
         delivery_manifest = load_json(project_root / "delivery-manifest.json")
     except ProjectError as exc:
@@ -1138,8 +1551,11 @@ def validate(project_root: Path, mode: str) -> Report:
         isinstance(value, dict)
         for value in (
             project,
+            master_clock,
             assets_document,
             shots_document,
+            timeline_document,
+            animatic_review,
             qa_report,
             delivery_manifest,
         )
@@ -1148,6 +1564,7 @@ def validate(project_root: Path, mode: str) -> Report:
         return report
 
     _validate_project_contract(project, report, final)
+    _validate_master_clock(project, master_clock, report, final)
     output = project.get("output")
     output_duration = (
         as_number(output.get("duration_sec")) if isinstance(output, dict) else None
@@ -1171,6 +1588,8 @@ def validate(project_root: Path, mode: str) -> Report:
         project_root,
         quality_mode,
     )
+    _validate_timeline(project, timeline_document, shots, report, final)
+    _validate_animatic(project_root, project, animatic_review, report, final)
 
     if used_assets:
         for asset_id in sorted(used_assets):

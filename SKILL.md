@@ -4,7 +4,7 @@ description: Plan, generate, edit, review, and deliver high-quality AI, programm
 license: MIT
 metadata:
   short-description: Quality-first, evidence-gated video production
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # Video Production Director
@@ -13,9 +13,11 @@ Act as a production director and release owner. Turn an intent into a defensible
 creative direction, a generation-ready shot system, selected takes, a finished
 edit, and a delivery package whose quality claims are supported by evidence.
 
-The agent orchestrates tools; it is not a native video model. Never claim that
-Codex generated pixels unless a concrete renderer, footage source, or external
-model produced them.
+The controlling agent orchestrates tools; it is not assumed to be a native video
+model or to understand complete video playback. Derive evidence from actual
+frames, transcripts, timelines, audio, and media measurements. Never claim that
+the agent generated pixels unless a concrete renderer, footage source, or
+external model produced them.
 
 ## Choose the operating mode
 
@@ -107,7 +109,21 @@ scale, and co-appearance conditions that the real shots require.
 Write `creative-bible.md` and populate `assets.json`. Read
 [references/directing-and-continuity.md](references/directing-and-continuity.md).
 
-### 3. Shots, previs, and timing
+### 3. Script and master clock
+
+Write `script.md` and `master-clock.json` before locking shot timing.
+
+- Select the master clock: `visual`, `voiceover`, `music`, or `dialogue`.
+- For voiceover or dialogue, record section text and realistic spoken duration.
+- For music, record source, BPM, section boundaries, markers, and key accents.
+- For visual timing, record action cues and reveal or transition markers.
+- Divide the program into chronological segments that cover the target duration.
+- Keep time budgets consistent with the actual spoken, musical, or action duration.
+
+Do not assume music is always first. Lock whichever clock governs the program;
+music, voice, dialogue, and picture may support it without replacing it.
+
+### 4. Shots, previs, and timing
 
 Break the piece into beats before shots. Give every shot:
 
@@ -123,12 +139,33 @@ Create keyframes where they reduce risk, plus a real-time animatic with scratch
 voice, music, and sound where timing matters. Watch it at speed; do not approve
 timing from a table or contact sheet.
 
-Populate `shots.json` and `timeline.md`.
+Populate `shots.json`, `timeline.md`, and `timeline.json`. `timeline.md` explains
+editorial choices; `timeline.json` is the machine-readable edit contract.
 
-### 4. Generation
+Inspect the animatic media and record its review:
+
+```bash
+python scripts/inspect_media.py animatic/animatic.mp4 \
+  --project projects/<project> --expected animatic \
+  --output projects/<project>/qa/animatic-technical-report.json \
+  --frames-dir projects/<project>/qa/animatic-frames --sample-fps 1
+```
+
+Populate `qa/animatic-review.json`. The previs gate remains blocked until the
+animatic decodes, matches program duration, was watched in real time, and has no
+unresolved blockers.
+
+### 5. Generation
 
 Use the control ladder in
 [references/generation-and-repair.md](references/generation-and-repair.md).
+
+Read the matching route guide before creating the implementation skeleton:
+
+- [programmatic](references/routes/programmatic.md)
+- [external-video](references/routes/external-video.md)
+- [timeline-edit](references/routes/timeline-edit.md)
+- [hybrid](references/routes/hybrid.md)
 
 Before a paid batch:
 
@@ -152,7 +189,11 @@ Judge complete motion, not a single frame. Select against pre-registered
 criteria. Stop after repeated failures of the same cause and simplify the shot
 or change the responsible layer.
 
-### 5. Edit, sound, graphics, and grade
+If the user authorizes multiple agents, read
+[parallel-production.md](references/parallel-production.md). Parallel work is
+optional and applies only after shot, asset, and output boundaries are stable.
+
+### 6. Edit, sound, graphics, and grade
 
 Treat generated clips as raw takes. Cut for story, performance, rhythm, and
 continuity. Keep trim handles. Use the same approved edit for picture, captions,
@@ -163,12 +204,23 @@ sound as layers rather than adding a single music bed. Composite exact graphics
 at final resolution. Normalize levels, color, grain, and sharpness across
 sources.
 
-### 6. Review and release
+### 7. Review and release
 
 Run automated media inspection, inspect full-size evidence, and perform a cold
 editorial review. Required categories are `technical`, `visual`, `editorial`,
-and `rights`. VLM output may screen defects but cannot replace human judgment
-for taste, story, claims, or brand approval.
+`rights`, and `content`. Add `text` when exact on-screen text or captions exist,
+and `audio_visual` when the program has audio. VLM output may screen defects but
+cannot replace human judgment for taste, story, claims, or brand approval.
+
+For an image-only review pass, generate a contact-sheet overview:
+
+```bash
+python scripts/make_contact_sheet.py renders/final.mp4 \
+  --output-dir qa/contact-sheets
+```
+
+Treat sheets as navigation. Native-resolution individual frames and motion
+samples remain the evidence used for acceptance.
 
 Generate a technical report:
 
@@ -204,8 +256,8 @@ Read [references/qa-and-delivery.md](references/qa-and-delivery.md).
 
 ## Gate order
 
-`brief` → `direction` → `continuity` → `previs` → `generation` → `edit` →
-`review` → `delivery`
+`brief` → `direction` → `script_clock` → `continuity` → `previs` →
+`generation` → `edit` → `review` → `delivery`
 
 Gate approvals contain file hashes. Changing approved content makes the gate
 stale until it is reviewed and approved again. A pending, stale, rejected, or
@@ -218,12 +270,18 @@ unverifiable gate blocks release.
 - `brief.md`: human-readable intent and approval basis.
 - `creative-bible.md`: selected direction, references, anti-references, visual
   and sound grammar.
+- `script.md`: outline, spoken copy, required exact content, and section budget.
+- `master-clock.json`: governing clock, BPM or spoken segments, time budget, and
+  cue markers.
 - `assets.json`: asset passports, reference roles, state variants, locks, and
   stress tests.
 - `shots.json`: shot contracts, continuity, capability route, acceptance, and
   selected takes.
 - `timeline.md`: edit order, in/out points, transitions, sound, graphics, and
   grade plan.
+- `timeline.json`: machine-readable video/audio/caption tracks and beat markers.
+- `animatic/animatic.mp4`: low-cost timed previsualization.
+- `qa/animatic-review.json`: real-time review decision and unresolved blockers.
 - `generation-log.jsonl`: append-only candidate history.
 - `qa-report.json`: observed checks, findings, waivers, and verdict.
 - `qa/technical-report.json`: deterministic media facts produced by inspection.
@@ -233,14 +291,26 @@ unverifiable gate blocks release.
 Read [references/artifacts.md](references/artifacts.md) when creating or
 repairing these files.
 
+For a project created with `0.1.0`, add missing artifacts and the
+`script_clock` gate without overwriting existing work:
+
+```bash
+python scripts/upgrade_project.py projects/<project>
+```
+
+The upgrade does not invent script or clock content; those gates remain pending
+until the producer fills and reviews them.
+
 ## Stop conditions
 
 Stop and request direction when:
 
 - intended use, rights, consent, or disclosure is unresolved for public work;
 - budget, provider access, or the required control surface is missing;
+- master-clock segments do not fit the target duration or remain unresolved;
+- the animatic is missing, cannot decode, was not watched in real time, or has
+  unresolved story, timing, or comprehension blockers;
 - a Hero asset remains unlocked or fails its real-scene stress tests;
-- the animatic has unresolved story, timing, or comprehension failures;
 - generation keeps failing from the same cause and the next remedy changes
   scope, cost, model, or creative direction;
 - only low-resolution frames, a contact sheet, or a successful API response

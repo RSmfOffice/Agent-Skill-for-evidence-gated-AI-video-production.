@@ -18,6 +18,7 @@ from init_project import initialize
 from inspect_media import expected_comparisons, parse_rate
 from preflight import validate_model_profile
 from record_candidate import record
+from upgrade_project import upgrade
 from validate_project import Report, _validate_generation_selection, validate
 
 
@@ -106,12 +107,93 @@ class ProjectStateTests(unittest.TestCase):
             "camera-left and the background remains quieter than the product.\n",
         )
         self.write_text(
+            "script.md",
+            "# Script\n\n"
+            "The product is closed at the start. It remains completely still "
+            "while the camera holds. At the action peak, the latch moves through "
+            "one controlled arc. The mechanism settles in the open state, the "
+            "highlight comes to rest on the latch, and the video ends without "
+            "additional text or claims. The visual action is the master clock.\n",
+        )
+        self.write_json(
+            "master-clock.json",
+            {
+                "schema_version": 1,
+                "type": "visual",
+                "source": "programmatic product action",
+                "duration_sec": 2.0,
+                "bpm": None,
+                "segments": [
+                    {
+                        "id": "B01",
+                        "start_sec": 0.0,
+                        "end_sec": 1.0,
+                        "intent": "Hold the closed state and establish the object.",
+                    },
+                    {
+                        "id": "B02",
+                        "start_sec": 1.0,
+                        "end_sec": 2.0,
+                        "intent": "Complete the latch action and land the end state.",
+                    },
+                ],
+                "markers": [
+                    {
+                        "time_sec": 1.0,
+                        "kind": "action",
+                        "label": "latch action peak",
+                    }
+                ],
+            },
+        )
+        self.write_text(
             "timeline.md",
             "# Timeline\n\n"
             "Shot S01 runs from 0.0 to 2.0 seconds with no transition at the "
             "head and a clean cut at the tail. The only sound is room tone plus "
             "one mechanical click at the action peak. No text is required. "
             "The final render is output from the approved timeline.\n",
+        )
+        self.write_json(
+            "timeline.json",
+            {
+                "schema_version": 1,
+                "duration_sec": 2.0,
+                "tracks": [
+                    {
+                        "id": "V1",
+                        "type": "video",
+                        "role": "primary",
+                        "items": [
+                            {
+                                "id": "V1-01",
+                                "shot_id": "S01",
+                                "source": "renders/final.mp4",
+                                "source_in": 0.0,
+                                "source_out": 2.0,
+                                "timeline_start": 0.0,
+                                "duration": 2.0,
+                                "transition": "hard-cut",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "A1",
+                        "type": "audio",
+                        "role": "mix",
+                        "items": [
+                            {
+                                "id": "A1-01",
+                                "source": "audio/sound.wav",
+                                "timeline_start": 0.0,
+                                "duration": 2.0,
+                                "transition": "continuous",
+                            }
+                        ],
+                    },
+                ],
+                "beat_markers": [],
+            },
         )
         self.write_text(
             "qa/previs-review.md",
@@ -136,6 +218,41 @@ class ProjectStateTests(unittest.TestCase):
                 b"frame-" + str(time_value).encode(),
             )
         self.make_file("qa/qa-summary.txt", b"reviewed")
+        animatic = self.make_file("animatic/animatic.mp4", b"animatic-fixture")
+        animatic_sample_frames = [
+            {
+                "path": f"qa/frames/frame_{index:05d}.jpg",
+                "time_sec": time_value,
+                "native_source": True,
+            }
+            for index, time_value in enumerate((0.1, 1.0, 1.9))
+        ]
+        self.write_json(
+            "qa/animatic-review.json",
+            {
+                "schema_version": 1,
+                "reviewer": "independent-previs-review",
+                "reviewed_at": "2026-10-25",
+                "watched_in_real_time": True,
+                "decision": "approved",
+                "issues": [],
+                "unresolved_blockers": [],
+                "notes": "Watched at real speed.",
+            },
+        )
+        self.write_json(
+            "qa/animatic-technical-report.json",
+            {
+                "schema_version": 1,
+                "source": "animatic/animatic.mp4",
+                "source_sha256": sha256_file(animatic),
+                "decode_ok": True,
+                "matched_expected": True,
+                "inspection_complete": True,
+                "format": {"duration_sec": 2.0},
+                "sample_frames": animatic_sample_frames,
+            },
+        )
 
         assets = load_json(self.root / "assets.json")
         assets["assets"] = [
@@ -307,6 +424,21 @@ class ProjectStateTests(unittest.TestCase):
                 "reviewer": "rights-review",
                 "evidence": ["rights/asset-ledger.md"],
             },
+            {
+                "category": "audio_visual",
+                "status": "pass",
+                "criterion": "The click lands on the visible mechanism peak.",
+                "reviewer": "independent-review",
+                "evidence": ["qa/qa-summary.txt"],
+                "time_sec": 1.0,
+            },
+            {
+                "category": "content",
+                "status": "pass",
+                "criterion": "The mechanism and product behavior are accurate.",
+                "reviewer": "product-review",
+                "evidence": ["qa/qa-summary.txt"],
+            },
         ]
         self.write_json("qa-report.json", qa)
 
@@ -324,6 +456,7 @@ class ProjectStateTests(unittest.TestCase):
         for gate in (
             "brief",
             "direction",
+            "script_clock",
             "continuity",
             "previs",
             "generation",
@@ -396,6 +529,26 @@ class ProjectStateTests(unittest.TestCase):
         with self.assertRaises(ProjectError):
             initialize(self.root, "Second Project", "hero")
 
+    def test_v01_project_can_be_upgraded_without_overwriting(self) -> None:
+        for relative in (
+            "script.md",
+            "master-clock.json",
+            "timeline.json",
+            "qa/animatic-review.json",
+        ):
+            (self.root / relative).unlink()
+        project = load_json(self.root / "project.json")
+        project["output"].pop("text_required", None)
+        project["gates"].pop("script_clock", None)
+        self.write_json("project.json", project)
+
+        result = upgrade(self.root)
+        self.assertIn("script.md", result["created"])
+        self.assertIn("script_clock", load_json(self.root / "project.json")["gates"])
+        self.assertFalse(
+            load_json(self.root / "project.json")["output"]["text_required"]
+        )
+
     def test_rate_parser(self) -> None:
         self.assertAlmostEqual(parse_rate("30000/1001"), 29.97002997, places=5)
         self.assertIsNone(parse_rate("0/0"))
@@ -421,6 +574,31 @@ class ProjectStateTests(unittest.TestCase):
             },
             0,
             {"format_name": "mov,mp4,m4a,3gp,3g2,mj2", "duration": "2.0"},
+        )
+        self.assertTrue(all(item["ok"] for item in comparisons), comparisons)
+
+    def test_animatic_expected_profile_checks_source_and_duration(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        comparisons = expected_comparisons(
+            self.root,
+            self.root / "animatic/animatic.mp4",
+            project,
+            {
+                "width": 960,
+                "height": 540,
+                "fps": 15.0,
+                "duration_sec": 2.0,
+                "codec_name": "h264",
+            },
+            {
+                "codec_name": "aac",
+                "sample_rate": "48000",
+                "channels": 2,
+            },
+            0,
+            {"format_name": "mov,mp4,m4a,3gp,3g2,mj2", "duration": "2.0"},
+            profile="animatic",
         )
         self.assertTrue(all(item["ok"] for item in comparisons), comparisons)
 
@@ -522,6 +700,51 @@ class ProjectStateTests(unittest.TestCase):
             report,
         )
         self.assertTrue(any("output_sha256 is stale" in item for item in report.errors))
+
+    def test_master_clock_gap_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        clock = load_json(self.root / "master-clock.json")
+        clock["segments"][1]["start_sec"] = 1.2
+        self.write_json("master-clock.json", clock)
+        report = validate(self.root, "final")
+        self.assertTrue(any("master-clock segment gap" in item for item in report.errors))
+
+    def test_timeline_gap_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        timeline = load_json(self.root / "timeline.json")
+        timeline["tracks"][0]["items"][0]["duration"] = 1.8
+        self.write_json("timeline.json", timeline)
+        report = validate(self.root, "final")
+        self.assertTrue(any("primary timeline covers" in item for item in report.errors))
+
+    def test_animatic_requires_real_time_review(self) -> None:
+        self.build_releasable_fixture()
+        review = load_json(self.root / "qa/animatic-review.json")
+        review["watched_in_real_time"] = False
+        self.write_json("qa/animatic-review.json", review)
+        report = validate(self.root, "final")
+        self.assertTrue(any("watched in real time" in item for item in report.errors))
+
+    def test_text_requirement_adds_text_qa_category(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["output"]["text_required"] = True
+        self.write_json("project.json", project)
+        report = validate(self.root, "final")
+        self.assertTrue(any("required categories: text" in item for item in report.errors))
+
+    def test_music_clock_requires_markers(self) -> None:
+        self.build_releasable_fixture()
+        project = load_json(self.root / "project.json")
+        project["clock"]["type"] = "music"
+        self.write_json("project.json", project)
+        clock = load_json(self.root / "master-clock.json")
+        clock["type"] = "music"
+        clock["bpm"] = 120
+        clock["markers"] = []
+        self.write_json("master-clock.json", clock)
+        report = validate(self.root, "final")
+        self.assertTrue(any("music master clock needs" in item for item in report.errors))
 
 
 if __name__ == "__main__":

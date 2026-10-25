@@ -18,6 +18,13 @@ Choose the least stochastic route that satisfies the shot:
 Route per shot and per layer. A project may combine footage, code graphics,
 generated inserts, and post-produced text.
 
+Route-specific implementation guides:
+
+- [programmatic](routes/programmatic.md)
+- [external-video](routes/external-video.md)
+- [timeline-edit](routes/timeline-edit.md)
+- [hybrid](routes/hybrid.md)
+
 Exact logos, prices, legal copy, CRUD UI, data, and subtitles normally belong
 outside the generative layer. If a model cannot hold a critical object, use a
 deterministic asset, 3D, compositing, or a different shot design.

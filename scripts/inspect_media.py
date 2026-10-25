@@ -129,6 +129,7 @@ def expected_comparisons(
     audio: dict[str, Any] | None,
     subtitle_count: int,
     format_info: dict[str, Any],
+    profile: str = "final",
 ) -> list[dict[str, Any]]:
     output = project.get("output")
     if not isinstance(output, dict):
@@ -148,6 +149,31 @@ def expected_comparisons(
 
     expected_source = output.get("path")
     actual_source = relative_project_path(project_root, media_path)
+    if profile == "animatic":
+        compare(
+            "source",
+            "animatic/animatic.mp4",
+            actual_source,
+            actual_source == "animatic/animatic.mp4",
+        )
+        expected_duration = as_number(output.get("duration_sec"))
+        actual_duration = probe_number(format_info.get("duration"))
+        compare(
+            "duration_sec",
+            expected_duration,
+            actual_duration,
+            expected_duration is not None
+            and actual_duration is not None
+            and abs(expected_duration - actual_duration) <= 0.1,
+        )
+        clock = project.get("clock")
+        if (
+            isinstance(clock, dict)
+            and clock.get("type") in {"voiceover", "music", "dialogue"}
+        ):
+            compare("has_audio", True, audio is not None, audio is not None)
+        return comparisons
+
     compare("source", expected_source, actual_source, actual_source == expected_source)
 
     expected_width = as_number(output.get("width"))
@@ -462,7 +488,7 @@ def inspect(media_path: Path, project_root: Path | None, args: argparse.Namespac
         )
 
     comparisons: list[dict[str, Any]] = []
-    if project_root is not None:
+    if project_root is not None and args.expected != "none":
         project = load_json(project_root / "project.json")
         comparisons = expected_comparisons(
             project_root,
@@ -472,6 +498,7 @@ def inspect(media_path: Path, project_root: Path | None, args: argparse.Namespac
             audio,
             subtitle_count,
             format_info,
+            args.expected,
         )
 
     decode_ok = decode_result.returncode == 0
@@ -512,6 +539,7 @@ def inspect(media_path: Path, project_root: Path | None, args: argparse.Namespac
         "decode_ok": decode_ok,
         "decode_errors": "\n".join(decode_result.stderr.splitlines()[-12:]),
         "matched_expected": matched_expected,
+        "expected_profile": args.expected,
         "comparisons": comparisons,
         "observations": {
             "black_and_freeze": motion,
@@ -542,6 +570,12 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--frames-dir", type=Path)
     parser.add_argument("--sample-fps", type=float, default=2.0)
+    parser.add_argument(
+        "--expected",
+        choices=("final", "animatic", "none"),
+        default="final",
+        help="Compare against final specs, animatic duration, or nothing",
+    )
     parser.add_argument("--ffmpeg")
     parser.add_argument("--ffprobe")
     args = parser.parse_args()

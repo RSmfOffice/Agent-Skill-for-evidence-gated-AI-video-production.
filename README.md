@@ -12,6 +12,8 @@ Codex environment.
 A quality-first Agent Skill for planning, generating, editing, reviewing, and
 delivering AI, programmatic, hybrid, or footage-based videos.
 
+Current Skill version: **0.2.0**.
+
 Most prompt collections optimize one call. This skill maintains production
 memory across calls: creative direction, asset continuity, shot contracts,
 model capability, candidate evidence, edit decisions, technical QC, rights, and
@@ -21,6 +23,7 @@ final delivery.
 
 - Chooses control before model: deterministic assets and footage first,
   image-to-video and keyframe control next, text-to-video for exploration.
+- Locks the script and governing audio/visual clock before shot timing.
 - Treats references as specifications with control scope and exclusions.
 - Locks recurring people, products, locations, props, and state variants before
   expensive generation.
@@ -29,6 +32,7 @@ final delivery.
 - Records every candidate's prompt, model, version, references, parameters,
   cost, output hash, and verdict.
 - Separates technical, visual, editorial, and rights review.
+- Requires a reviewed animatic and a machine-readable timeline before release.
 - Uses hashed stage approvals. Changing approved content invalidates the gate.
 - Requires native-resolution shot evidence and an actual full-file technical
   inspection before release.
@@ -38,8 +42,9 @@ final delivery.
 ```text
 intake
   -> creative direction
+  -> script and master clock
   -> continuity and asset locks
-  -> shots and animatic
+  -> shots and validated animatic
   -> capability-based generation
   -> candidate selection
   -> edit, sound, graphics, grade
@@ -72,6 +77,14 @@ npx skills add <owner>/<repository>
 ```
 
 Start a new Codex conversation after installation so the skill is rediscovered.
+
+### Upgrade from 0.1.0
+
+Add the new project artifacts and gate without overwriting existing work:
+
+```bash
+python scripts/upgrade_project.py projects/my-video
+```
 
 ## Quick start
 
@@ -141,9 +154,12 @@ project/
 ├── project.json
 ├── brief.md
 ├── creative-bible.md
+├── script.md
+├── master-clock.json
 ├── assets.json
 ├── shots.json
 ├── timeline.md
+├── timeline.json
 ├── generation-log.jsonl
 ├── qa-report.json
 ├── delivery-manifest.json
@@ -152,6 +168,7 @@ project/
 ├── prompts/
 ├── generations/
 ├── selects/
+├── animatic/
 ├── qa/
 ├── rights/
 ├── renders/
@@ -163,11 +180,13 @@ project/
 | Script | Purpose |
 | --- | --- |
 | `init_project.py` | Create the stateful project scaffold |
+| `upgrade_project.py` | Add v0.2.0 artifacts to an existing v0.1.0 project |
 | `preflight.py` | Check Python, media tools, project state, and model profiles |
 | `validate_project.py` | Validate planning structure or enforce final release |
 | `approve_gate.py` | Hash stage artifacts and record explicit approval |
 | `record_candidate.py` | Append a generated candidate with model, prompt, cost, and hashes |
 | `inspect_media.py` | Probe, decode, sample frames, measure loudness, and record observations |
+| `make_contact_sheet.py` | Create overview contact sheets without treating them as acceptance evidence |
 | `build_manifest.py` | Hash final delivery files and create the release manifest |
 
 ## Quality model

@@ -11,6 +11,7 @@ Capture the following in `brief.md` and `project.json`:
   remember, or do.
 - **Delivery:** platform, placement, master specifications, variants, captions,
   safe areas, and required metadata.
+- **Master clock:** whether picture, voiceover, music, or dialogue governs time.
 - **Must include:** exact product, people, claims, actions, copy, logos, data, or
   legal text.
 - **Must avoid:** forbidden imagery, claims, styles, likenesses, competitors,

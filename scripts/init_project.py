@@ -20,6 +20,7 @@ EXTRA_DIRECTORIES = (
     "prompts",
     "generations",
     "selects",
+    "animatic",
     "qa",
     "rights",
     "renders",
