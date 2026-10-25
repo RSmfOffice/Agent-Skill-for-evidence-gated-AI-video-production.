@@ -1,5 +1,7 @@
 # Agent-Skill-for-evidence-gated-AI-video-production.
 
+**English** | [简体中文](README.zh-CN.md)
+
 用于增强 DeepSeek 在接入 Codex 环境下的视频生成能力。
 
 Used to enhance DeepSeek's video generation capability when connecting to the
