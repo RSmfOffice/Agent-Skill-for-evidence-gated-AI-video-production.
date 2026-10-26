@@ -72,9 +72,11 @@
     "max_failures_same_cause": 2,
     "max_candidates_per_shot": 12,
     "allow_silent_model_fallback": false,
+    "review_flow": "issue-list-then-human",
     "require_independent_review": true,
     "require_human_final_approval": true,
-    "require_companion_review": true
+    "require_companion_review": true,
+    "require_user_issue_calibration": true
   },
   "gates": {
     "brief": {

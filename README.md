@@ -12,7 +12,7 @@ Codex environment.
 A quality-first Agent Skill for planning, generating, editing, reviewing, and
 delivering AI, programmatic, hybrid, or footage-based videos.
 
-Current Skill version: **0.5.0**.
+Current Skill version: **0.5.1**.
 
 Most prompt collections optimize one call. This skill maintains production
 memory across calls: creative direction, asset continuity, shot contracts,
@@ -50,6 +50,8 @@ final delivery.
   self-approval.
 - Requires independent verification of changed media bytes before an accepted
   review fix can pass the release gate.
+- Stops after the initial issue list until the user completes issue triage and
+  records a calibration receipt.
 
 ## Workflow
 
@@ -64,6 +66,7 @@ intake
   -> edit, sound, graphics, grade
   -> hash-bound review handoff
   -> technical + visual + editorial + rights review
+  -> initial issue list + human calibration stop
   -> scoped review feedback and regression
   -> independent verification of changed bytes
   -> delivery manifest
@@ -199,7 +202,7 @@ project/
 | Script | Purpose |
 | --- | --- |
 | `init_project.py` | Create the stateful project scaffold |
-| `upgrade_project.py` | Add v0.5.0 review-contract artifacts and invalidate stale approvals |
+| `upgrade_project.py` | Add v0.5.1 review calibration artifacts and invalidate stale approvals |
 | `preflight.py` | Check Python, media tools, project state, and model profiles |
 | `validate_project.py` | Validate planning structure or enforce final release |
 | `approve_gate.py` | Hash stage artifacts and record explicit approval |

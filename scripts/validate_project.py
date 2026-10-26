@@ -99,6 +99,16 @@ MOTION_TYPES = {
     "lip-sync",
 }
 REVIEWER_KINDS = {"self", "cold-agent", "human", "external"}
+REVIEW_FLOWS = {"issue-list-then-human", "auto-coevolve"}
+REVIEW_STATE_STATUSES = {
+    "not_started",
+    "awaiting_user_issue_calibration",
+    "calibrated",
+    "repair_in_progress",
+    "verification_pending",
+    "complete",
+}
+HUMAN_CALIBRATION_STATUSES = {"pending", "confirmed", "declined"}
 REVIEW_COVERAGE = {
     "technical",
     "content",
@@ -309,9 +319,23 @@ def _validate_project_contract(
             "require_independent_review",
             "require_human_final_approval",
             "require_companion_review",
+            "require_user_issue_calibration",
         ):
             if not isinstance(policy.get(key), bool):
                 report.error(f"project.policy.{key} must be a boolean")
+        if policy.get("review_flow") not in REVIEW_FLOWS:
+            report.error(
+                "project.policy.review_flow must be issue-list-then-human "
+                "or auto-coevolve"
+            )
+        if (
+            policy.get("review_flow") == "issue-list-then-human"
+            and policy.get("require_user_issue_calibration") is not True
+        ):
+            report.error(
+                "issue-list-then-human review_flow requires "
+                "require_user_issue_calibration"
+            )
         for key in (
             "hero_candidate_target",
             "max_failures_same_cause",
@@ -2164,6 +2188,7 @@ def _validate_review_artifacts(
 
     companion_paths = {
         "result": project_root / "qa" / "review-result.json",
+        "state": project_root / "qa" / "review-state.json",
         "response": project_root / "qa" / "change-response.json",
         "verification": project_root / "qa" / "review-verification.json",
     }
@@ -2177,6 +2202,72 @@ def _validate_review_artifacts(
                 + ", ".join(missing)
             )
             return
+
+    if companion_required and companion_paths["result"].is_file():
+        try:
+            review_result = load_json(companion_paths["result"])
+            review_state = load_json(companion_paths["state"])
+        except ProjectError as exc:
+            report.error(str(exc))
+            return
+        if isinstance(review_result, dict) and isinstance(review_state, dict):
+            if review_state.get("schema_version") != 1:
+                report.error("qa/review-state.json schema_version must be 1")
+            if review_state.get("project_id") != project.get("project_id"):
+                report.error("review state project_id must match project.project_id")
+            if review_state.get("status") not in REVIEW_STATE_STATUSES:
+                report.error("review state status is invalid")
+            elif final and review_state.get("status") != "complete":
+                report.error("review state must be complete before final release")
+            if review_state.get("review_id") != review_result.get("review_id"):
+                report.error("review state review_id must match review result")
+            if review_state.get("media_sha256") != review_result.get("media_sha256"):
+                report.error("review state media_sha256 must match review result")
+            initial_hash = str(
+                review_state.get("initial_review_result_sha256") or ""
+            )
+            if not re.fullmatch(r"[0-9a-fA-F]{64}", initial_hash):
+                report.error(
+                    "review state initial_review_result_sha256 must be 64 hex characters"
+                )
+            _required_text(
+                review_state.get("issue_list_presented_at"),
+                "review-state.issue_list_presented_at",
+                report,
+                final,
+            )
+            if review_result.get("phase") != "calibrated":
+                report.error(
+                    "review result phase must be calibrated before repair or release"
+                )
+            if review_result.get("user_calibration_required") is not True:
+                report.error("review result must require user issue calibration")
+            calibration = review_state.get("human_calibration")
+            if not isinstance(calibration, dict):
+                report.error("review state human_calibration must be an object")
+            else:
+                if calibration.get("required") is not True:
+                    report.error("human calibration must be required")
+                if calibration.get("status") not in HUMAN_CALIBRATION_STATUSES:
+                    report.error("human calibration status is invalid")
+                elif final and calibration.get("status") != "confirmed":
+                    report.error("human issue calibration must be confirmed")
+                _required_text(
+                    calibration.get("calibrated_by"),
+                    "review-state.human_calibration.calibrated_by",
+                    report,
+                    final,
+                )
+                _required_text(
+                    calibration.get("calibrated_at"),
+                    "review-state.human_calibration.calibrated_at",
+                    report,
+                    final,
+                )
+                if not isinstance(calibration.get("user_actions"), list):
+                    report.error(
+                        "review state human_calibration.user_actions must be a list"
+                    )
 
     validator = _review_validator_path()
     if not validator:

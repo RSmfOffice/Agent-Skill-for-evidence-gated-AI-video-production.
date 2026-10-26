@@ -4,7 +4,7 @@ description: Plan, generate, edit, review, and deliver high-quality AI, programm
 license: MIT
 metadata:
   short-description: Quality-first, evidence-gated video production
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Video Production Director
@@ -23,7 +23,10 @@ external model produced them.
 
 - `plan`: produce a brief, direction, continuity plan, shot list, prompts, or
   animatic without paid generation.
-- `produce`: execute the complete workflow through a validated delivery.
+- `produce`: create the final candidate, technical evidence, handoff, and an
+  initial issue list; stop for human issue calibration by default.
+- `deliver`: continue the calibrated review loop through repair, independent
+  verification, and delivery. Use only after explicit user authorization.
 - `prompt`: compile an approved shot contract for a specific model or workflow.
 - `review`: inspect existing media, diagnose defects, and recommend repairs.
 - `repair`: revise the cheapest responsible layer and re-test only affected
@@ -72,6 +75,9 @@ small prompt request into a full production unless the user asks for it.
     When `policy.require_companion_review` is true, also require a matched
     review result, generation response, and independent verification of any
     changed bytes before release.
+13. **List issues before repair.** Automatic review may identify and list
+    problems, but must stop before creating change requests or repairing media
+    until the user has completed issue triage and confirmed the issue set.
 
 ## Working workflow
 
@@ -242,12 +248,37 @@ observed, use the declared method, and use hashed evidence objects with a
 provenance role. Every blocking acceptance needs a passing check. Self-review
 cannot pass a project whose policy requires independent review.
 
-For a standard or Hero review with companion review enabled, use
-`video-review-evolution` as the independent review side. Apply its
-`generation_change_requests` through the cheapest responsible layer and return
-`qa/change-response.json`. Do not claim a fix until the review Skill validates
-the new media bytes in `qa/review-verification.json`, including the original
-failure, known-clean controls, negative examples, and declared holdout.
+#### 7.1 Initial issue list
+
+For standard or Hero work with companion review enabled, invoke
+`video-review-evolution` in `review` mode only.
+
+1. Save the initial findings in `qa/review-result.json` with
+   `phase: "initial"`, `user_calibration_required: true`, and an empty
+   `generation_change_requests` array.
+2. Save `qa/review-state.json` with
+   `status: "awaiting_user_issue_calibration"`.
+3. Record the SHA-256 of the initial review result and presentation time.
+4. Present the issue list and stop.
+
+Do not create `qa/change-response.json`, edit media, rerender, mark the review
+complete, or enter delivery in this phase.
+
+#### 7.2 Human issue calibration
+
+Continue only after the user responds with omissions, corrections, intent, or
+explicit confirmation. Record the user, time, and actions in
+`qa/review-state.json.human_calibration`, set the state to `calibrated`, and only
+then change the review result phase to `calibrated`.
+
+#### 7.3 Repair and release
+
+In `deliver` mode, apply calibrated `generation_change_requests` through the
+cheapest responsible layer and return `qa/change-response.json`. Do not claim a
+fix until the review Skill validates the new media bytes in
+`qa/review-verification.json`, including the original failure, known-clean
+controls, negative examples, and declared holdout. Set review state to `complete`
+only after verification and normal final validation pass.
 
 For an image-only review pass, generate a contact-sheet overview:
 
@@ -363,6 +394,7 @@ Stop and request direction when:
 - required independent review is satisfied only by the producer;
 - companion review is configured but the matched review chain is missing,
   stale, or internally inconsistent;
+- the initial issue list has not been explicitly calibrated by the user;
 - a Hero asset remains unlocked or fails its real-scene stress tests;
 - generation keeps failing from the same cause and the next remedy changes
   scope, cost, model, or creative direction;
@@ -373,6 +405,16 @@ Stop and request direction when:
 - final validation reports a blocker.
 
 ## Final response
+
+For `produce`, place the issue list first and end with:
+
+```text
+STATUS: AWAITING USER ISSUE CALIBRATION
+```
+
+Do not summarize the render as delivered or release-approved in this state.
+
+For `deliver`, report:
 
 Report the delivered files and specifications, chosen direction, per-shot pixel
 sources and models, selected takes, passed checks, residual risks, rights and

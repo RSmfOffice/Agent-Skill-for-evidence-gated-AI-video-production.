@@ -4,12 +4,12 @@
   "project_id": null,
   "review_skill": {
     "name": "video-review-evolution",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "sha256": null
   },
   "generation_skill": {
     "name": "video-production-director",
-    "version": "0.5.0"
+    "version": "0.5.1"
   },
   "reviewer": {
     "id": null,
@@ -18,6 +18,8 @@
     "independent_from_producer": true
   },
   "media_sha256": null,
+  "phase": "calibrated",
+  "user_calibration_required": true,
   "coverage": {},
   "coverage_reasons": {},
   "verdict": "provisional",

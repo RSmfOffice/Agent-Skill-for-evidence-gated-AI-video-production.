@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "project_id": null,
+  "review_id": null,
+  "media_sha256": null,
+  "initial_review_result_sha256": null,
+  "status": "not_started",
+  "issue_list_presented_at": null,
+  "human_calibration": {
+    "required": true,
+    "status": "pending",
+    "calibrated_by": null,
+    "calibrated_at": null,
+    "user_actions": [],
+    "notes": ""
+  }
+}

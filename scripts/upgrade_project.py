@@ -78,7 +78,7 @@ def upgrade_handoff(project_root: Path) -> bool:
     if not isinstance(generation.get("path"), str) or not generation.get("path"):
         generation["path"] = str(SKILL_ROOT)
     generation.setdefault("sha256", None)
-    handoff["review_skill_min_version"] = "0.3.0"
+    handoff["review_skill_min_version"] = "0.3.1"
     handoff.setdefault("review_scope", [])
     handoff.setdefault("required_observations", [])
     handoff.setdefault("intentional_choices", [])
@@ -127,6 +127,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         "qa/animatic-review.json",
         "qa/review-handoff.json",
         "qa/review-result.json",
+        "qa/review-state.json",
         "qa/change-response.json",
         "qa/review-verification.json",
     ):
@@ -154,6 +155,8 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         policy = {}
     policy.setdefault("require_independent_review", True)
     policy.setdefault("require_companion_review", True)
+    policy.setdefault("review_flow", "issue-list-then-human")
+    policy.setdefault("require_user_issue_calibration", True)
     project["policy"] = policy
     duration = output.get("duration_sec")
     clock = project.get("clock")

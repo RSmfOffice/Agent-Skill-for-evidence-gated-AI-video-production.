@@ -17,7 +17,9 @@ companion review Skill improves this production workflow.
 ```text
 final candidate
   -> qa/review-handoff.json
-  -> qa/review-result.json
+  -> initial qa/review-result.json
+  -> qa/review-state.json awaiting user calibration
+  -> user issue triage
   -> qa/change-response.json
   -> qa/review-verification.json
   -> final release gate
@@ -25,6 +27,9 @@ final candidate
 
 The response is provisional. A change is not validated until an independent
 review examines the new file bytes and records the result.
+
+The initial issue list is not repair authorization. Stop before change requests
+or media modification until the user confirms or adjusts the issue set.
 
 ## Required handoff
 
@@ -106,6 +111,23 @@ Read `qa/review-result.json` only after confirming:
 - confirmed issues have hashed evidence;
 - change requests link confirmed issues and structured regression roles.
 
+Initial review results use `phase: "initial"` and must have an empty
+`generation_change_requests` array. Only after user calibration may the result
+move to `phase: "calibrated"` and contain change requests.
+
+## User issue calibration
+
+After presenting the initial list, write `qa/review-state.json` with:
+
+- review and media hashes;
+- hash of the initial review result;
+- `status: "awaiting_user_issue_calibration"`;
+- presentation time;
+- pending human calibration.
+
+Resume only after an explicit user response. Record the user, time, and actions,
+then set `human_calibration.status: "confirmed"` and state `status: "calibrated"`.
+
 ## Production response
 
 For every change request, decide `accepted`, `rejected`, or `deferred`.
@@ -140,11 +162,14 @@ New `standard` and `hero` projects default to:
 
 ```json
 {
-  "require_companion_review": true
+  "require_companion_review": true,
+  "review_flow": "issue-list-then-human",
+  "require_user_issue_calibration": true
 }
 ```
 
-When true, the review gate requires all four review artifacts. When false, the
+When true, the review gate requires the handoff, review result, review state,
+generation response, and verification. When false, the
 handoff remains required, but an external review path can be documented in the
 project QA report. Final release still requires accountable independent review
 according to project policy.

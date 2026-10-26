@@ -26,7 +26,7 @@ GATE_ORDER = (
 )
 
 SKILL_NAME = "video-production-director"
-SKILL_VERSION = "0.5.0"
+SKILL_VERSION = "0.5.1"
 REVIEW_CONTRACT_SCHEMA_VERSION = 2
 
 DEFAULT_GATE_ARTIFACTS = {
@@ -55,6 +55,7 @@ MANDATORY_REVIEW_ARTIFACTS = (
 
 MANDATORY_COMPANION_REVIEW_ARTIFACTS = (
     "qa/review-result.json",
+    "qa/review-state.json",
     "qa/change-response.json",
     "qa/review-verification.json",
 )

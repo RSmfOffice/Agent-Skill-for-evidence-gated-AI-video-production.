@@ -1,8 +1,8 @@
 interface:
   display_name: "Video Production Director"
-  short_description: "Evidence-gated video production with review feedback"
+  short_description: "Evidence-gated production with human issue calibration"
   brand_color: "#0F766E"
-  default_prompt: "Use $video-production-director to produce an evidence-gated video and a hash-bound review handoff that can improve the workflow through independent review."
+  default_prompt: "Use $video-production-director to produce an evidence-gated video, present the initial issue list, and stop for my calibration before any repair or release."
 
 policy:
   allow_implicit_invocation: true

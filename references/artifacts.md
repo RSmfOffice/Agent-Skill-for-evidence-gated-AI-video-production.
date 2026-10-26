@@ -28,6 +28,7 @@ project directory.
 ├── qa/
 │   ├── review-handoff.json
 │   ├── review-result.json
+│   ├── review-state.json
 │   ├── change-response.json
 │   └── review-verification.json
 ├── rights/
@@ -226,7 +227,7 @@ Regenerate it after any final-file change.
 
 ## qa/review-handoff.json
 
-Required for `standard` and `hero` review under Skill `0.5.0+`. It binds the
+Required for `standard` and `hero` review under Skill `0.5.1+`. It binds the
 exact reviewed media and gives an independent reviewer:
 
 - generation and review Skill versions;
@@ -249,6 +250,22 @@ invalidate the intent hash.
 Produced by the review side. It contains coverage statuses, evidence-bound
 issues, intentional-overlap judgments, generation change requests, limitations,
 and residual risks. It must bind the same media hash as the handoff.
+
+Initial review uses `phase: "initial"` with no change requests. After explicit
+user issue calibration it becomes `phase: "calibrated"` and may contain change
+requests.
+
+## qa/review-state.json
+
+Records the mandatory issue-list stop and user calibration receipt:
+
+- `status`: `awaiting_user_issue_calibration`, `calibrated`,
+  `repair_in_progress`, `verification_pending`, or `complete`;
+- initial review result SHA-256 and issue-list presentation time;
+- human calibration status, user, time, actions, and notes.
+
+Final release requires `status: "complete"` and
+`human_calibration.status: "confirmed"`.
 
 ## qa/change-response.json
 
@@ -347,6 +364,7 @@ generation  -> generation-log.jsonl, shots.json
 edit        -> timeline.md, timeline.json
 review      -> qa-report.json, qa/technical-report.json,
                qa/review-handoff.json, qa/review-result.json,
+               qa/review-state.json,
                qa/change-response.json, qa/review-verification.json
 delivery    -> delivery-manifest.json
 ```

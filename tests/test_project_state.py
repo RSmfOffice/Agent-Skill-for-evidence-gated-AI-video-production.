@@ -655,11 +655,11 @@ class ProjectStateTests(unittest.TestCase):
             "created_at": utc_now(),
             "generation_skill": {
                 "name": "video-production-director",
-                "version": "0.5.0",
+                "version": "0.5.1",
                 "path": str(PRODUCTION_SKILL_ROOT),
                 "sha256": None,
             },
-            "review_skill_min_version": "0.3.0",
+            "review_skill_min_version": "0.3.1",
             "review_scope": review_scope,
             "media": {
                 "path": output["path"],
@@ -714,12 +714,12 @@ class ProjectStateTests(unittest.TestCase):
                 "project_id": project["project_id"],
                 "review_skill": {
                     "name": "video-review-evolution",
-                    "version": "0.3.0",
+                    "version": "0.3.1",
                     "sha256": None,
                 },
                 "generation_skill": {
                     "name": "video-production-director",
-                    "version": "0.5.0",
+                    "version": "0.5.1",
                 },
                 "reviewer": {
                     "id": "independent-reviewer",
@@ -728,6 +728,8 @@ class ProjectStateTests(unittest.TestCase):
                     "independent_from_producer": True,
                 },
                 "media_sha256": media_hash,
+                "phase": "calibrated",
+                "user_calibration_required": True,
                 "coverage": {category: "pass" for category in review_scope},
                 "coverage_reasons": {},
                 "verdict": "pass",
@@ -735,6 +737,49 @@ class ProjectStateTests(unittest.TestCase):
                 "generation_change_requests": [],
                 "residual_risks": [],
                 "limitations": [],
+            },
+        )
+        initial_result = {
+            "schema_version": 2,
+            "review_id": review_id,
+            "project_id": project["project_id"],
+            "media_sha256": media_hash,
+            "phase": "initial",
+            "user_calibration_required": True,
+            "issues": [],
+            "generation_change_requests": [],
+        }
+        initial_hash = sha256_bytes(
+            json.dumps(
+                initial_result,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+        self.write_json(
+            "qa/review-state.json",
+            {
+                "schema_version": 1,
+                "project_id": project["project_id"],
+                "review_id": review_id,
+                "media_sha256": media_hash,
+                "initial_review_result_sha256": initial_hash,
+                "status": "complete",
+                "issue_list_presented_at": utc_now(),
+                "human_calibration": {
+                    "required": True,
+                    "status": "confirmed",
+                    "calibrated_by": "human-reviewer",
+                    "calibrated_at": utc_now(),
+                    "user_actions": [
+                        {
+                            "action": "confirmed",
+                            "note": "User confirmed the initial issue list.",
+                        }
+                    ],
+                    "notes": "No additional issues in the state fixture.",
+                },
             },
         )
 
@@ -749,8 +794,8 @@ class ProjectStateTests(unittest.TestCase):
                 "new_media_sha256": media_hash,
                 "generation_skill_change": {
                     "changed": False,
-                    "from_version": "0.5.0",
-                    "to_version": "0.5.0",
+                    "from_version": "0.5.1",
+                    "to_version": "0.5.1",
                 },
                 "rule_changes": [],
             },
@@ -764,7 +809,7 @@ class ProjectStateTests(unittest.TestCase):
                 "project_id": project["project_id"],
                 "review_skill": {
                     "name": "video-review-evolution",
-                    "version": "0.3.0",
+                    "version": "0.3.1",
                     "sha256": None,
                 },
                 "reviewer": {
@@ -877,6 +922,28 @@ class ProjectStateTests(unittest.TestCase):
             "\n".join(report.errors),
         )
 
+    def test_uncalibrated_issue_list_blocks_release_and_repair(self) -> None:
+        self.build_releasable_fixture()
+        result = load_json(self.root / "qa" / "review-result.json")
+        result["phase"] = "initial"
+        result["generation_change_requests"] = []
+        self.write_json("qa/review-result.json", result)
+        state = load_json(self.root / "qa" / "review-state.json")
+        state["status"] = "awaiting_user_issue_calibration"
+        state["human_calibration"]["status"] = "pending"
+        state["human_calibration"]["calibrated_by"] = None
+        state["human_calibration"]["calibrated_at"] = None
+        self.write_json("qa/review-state.json", state)
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("review state must be complete" in item for item in report.errors),
+            "\n".join(report.errors),
+        )
+        self.assertTrue(
+            any("review result phase must be calibrated" in item for item in report.errors),
+            "\n".join(report.errors),
+        )
+
     def test_review_result_project_mismatch_blocks_release(self) -> None:
         self.build_releasable_fixture()
         result = load_json(self.root / "qa" / "review-result.json")
@@ -945,6 +1012,7 @@ class ProjectStateTests(unittest.TestCase):
             "master-clock.json",
             "timeline.json",
             "qa/animatic-review.json",
+            "qa/review-state.json",
         ):
             (self.root / relative).unlink()
         project = load_json(self.root / "project.json")
@@ -954,6 +1022,9 @@ class ProjectStateTests(unittest.TestCase):
         project.pop("content_contract", None)
         project.pop("motion_contracts", None)
         project["policy"].pop("require_independent_review", None)
+        project["policy"].pop("require_companion_review", None)
+        project["policy"].pop("require_user_issue_calibration", None)
+        project["policy"].pop("review_flow", None)
         self.write_json("project.json", project)
         shots = load_json(self.root / "shots.json")
         for criterion in shots["shots"][0]["acceptance"]:
@@ -978,10 +1049,11 @@ class ProjectStateTests(unittest.TestCase):
         self.assertIn("script.md", result["created"])
         self.assertIn("script_clock", upgraded["gates"])
         self.assertFalse(upgraded["output"]["text_required"])
-        self.assertEqual("0.5.0", upgraded["upgraded_to"])
+        self.assertEqual("0.5.1", upgraded["upgraded_to"])
         self.assertIn("content_contract", upgraded)
         self.assertIn("motion_contracts", upgraded)
         self.assertTrue((self.root / "qa" / "review-handoff.json").is_file())
+        self.assertTrue((self.root / "qa" / "review-state.json").is_file())
         self.assertTrue(result["requires_manual_review"])
         report = validate(self.root, "final")
         self.assertTrue(
@@ -1004,7 +1076,7 @@ class ProjectStateTests(unittest.TestCase):
 
         self.assertTrue(result["review_handoff_upgraded"])
         self.assertEqual(2, upgraded["schema_version"])
-        self.assertEqual("0.5.0", upgraded["generation_skill"]["version"])
+        self.assertEqual("0.5.1", upgraded["generation_skill"]["version"])
         self.assertEqual(
             "json-without-gates",
             upgraded["sources"]["project"]["hash_mode"],
