@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,12 +16,16 @@ from _common import (
     DEFAULT_GATE_ARTIFACTS,
     GATE_ORDER,
     REQUIRED_PROJECT_FILES,
+    REVIEW_CONTRACT_SCHEMA_VERSION,
+    SKILL_NAME,
+    SKILL_VERSION,
     ProjectError,
     as_number,
     is_within,
     load_json,
     nonempty_string,
     project_path,
+    required_gate_artifacts,
     sha256_file,
 )
 
@@ -93,6 +99,17 @@ MOTION_TYPES = {
     "lip-sync",
 }
 REVIEWER_KINDS = {"self", "cold-agent", "human", "external"}
+REVIEW_COVERAGE = {
+    "technical",
+    "content",
+    "text",
+    "visual",
+    "motion",
+    "editorial",
+    "audio_visual",
+    "rights",
+    "accessibility",
+}
 
 
 class Report:
@@ -291,6 +308,7 @@ def _validate_project_contract(
             "allow_silent_model_fallback",
             "require_independent_review",
             "require_human_final_approval",
+            "require_companion_review",
         ):
             if not isinstance(policy.get(key), bool):
                 report.error(f"project.policy.{key} must be a boolean")
@@ -2032,7 +2050,7 @@ def _validate_gates(
         if not isinstance(artifacts, dict) or not artifacts:
             report.error(f"gate {gate} has no approved artifact hashes")
             continue
-        for required in DEFAULT_GATE_ARTIFACTS[gate]:
+        for required in required_gate_artifacts(project, gate):
             if required not in artifacts:
                 report.error(f"gate {gate} does not approve required artifact {required}")
         for value, expected_hash in artifacts.items():
@@ -2050,6 +2068,163 @@ def _validate_gates(
                 report.error(
                     f"gate {gate} is stale because {value} changed after approval"
                 )
+
+
+def _review_validator_path() -> Path | None:
+    configured = os.environ.get("VIDEO_REVIEW_VALIDATOR")
+    if configured:
+        path = Path(configured).expanduser()
+        return path if path.is_file() else None
+    sibling = (
+        Path(__file__).resolve().parents[2]
+        / "video-review-evolution"
+        / "scripts"
+        / "validate_contracts.py"
+    )
+    return sibling if sibling.is_file() else None
+
+
+def _validate_review_artifacts(
+    project_root: Path,
+    project: dict[str, Any],
+    report: Report,
+    final: bool,
+) -> None:
+    quality_mode = str(project.get("quality_mode", "standard"))
+    policy = project.get("policy")
+    companion_required = bool(
+        isinstance(policy, dict)
+        and policy.get("require_companion_review") is True
+    )
+    handoff_path = project_root / "qa" / "review-handoff.json"
+
+    if final and quality_mode in {"standard", "hero"} and not handoff_path.is_file():
+        report.error("qa/review-handoff.json is required for final release")
+        return
+    if not handoff_path.is_file():
+        return
+
+    try:
+        handoff = load_json(handoff_path)
+    except ProjectError as exc:
+        report.error(str(exc))
+        return
+    if not isinstance(handoff, dict):
+        report.error("qa/review-handoff.json must be an object")
+        return
+
+    if handoff.get("schema_version") != REVIEW_CONTRACT_SCHEMA_VERSION:
+        report.error(
+            "qa/review-handoff.json schema_version must be "
+            f"{REVIEW_CONTRACT_SCHEMA_VERSION}"
+        )
+    if handoff.get("project_id") != project.get("project_id"):
+        report.error("review handoff project_id must match project.project_id")
+    generation = handoff.get("generation_skill")
+    if not isinstance(generation, dict):
+        report.error("review handoff generation_skill must be an object")
+    else:
+        if generation.get("name") != SKILL_NAME:
+            report.error(
+                f"review handoff generation_skill.name must be {SKILL_NAME}"
+            )
+        if generation.get("version") != SKILL_VERSION:
+            report.error(
+                "review handoff generation_skill.version must match the "
+                f"installed Skill version {SKILL_VERSION}"
+            )
+
+    media = handoff.get("media")
+    output = project.get("output")
+    if not isinstance(media, dict):
+        report.error("review handoff media must be an object")
+    elif isinstance(output, dict):
+        if media.get("path") != output.get("path"):
+            report.error("review handoff media.path must match project.output.path")
+        output_path = _path_status(
+            project_root,
+            output.get("path"),
+            "project.output.path",
+            report,
+            final,
+        )
+        if output_path and media.get("sha256") != sha256_file(output_path):
+            report.error("review handoff media.sha256 does not match final media")
+
+    scope = handoff.get("review_scope")
+    if not isinstance(scope, list) or not scope:
+        report.error("review handoff review_scope must be a non-empty list")
+    elif any(value not in REVIEW_COVERAGE for value in scope):
+        report.error("review handoff review_scope contains an unknown category")
+    elif len(set(scope)) != len(scope):
+        report.error("review handoff review_scope contains duplicates")
+
+    if not final:
+        return
+
+    companion_paths = {
+        "result": project_root / "qa" / "review-result.json",
+        "response": project_root / "qa" / "change-response.json",
+        "verification": project_root / "qa" / "review-verification.json",
+    }
+    if companion_required:
+        missing = [
+            name for name, path in companion_paths.items() if not path.is_file()
+        ]
+        if missing:
+            report.error(
+                "companion review is required but these artifacts are missing: "
+                + ", ".join(missing)
+            )
+            return
+
+    validator = _review_validator_path()
+    if not validator:
+        if companion_required:
+            report.error(
+                "video-review-evolution validate_contracts.py is required for "
+                "this project; set VIDEO_REVIEW_VALIDATOR if it is installed "
+                "outside the sibling Skill directory"
+            )
+        return
+
+    command = [
+        sys.executable,
+        "-X",
+        "utf8",
+        str(validator),
+        "--handoff",
+        str(handoff_path),
+        "--json",
+    ]
+    if companion_required:
+        command.append("--require-complete")
+    if companion_paths["result"].is_file():
+        command.extend(["--result", str(companion_paths["result"])])
+    if companion_paths["response"].is_file():
+        command.extend(["--response", str(companion_paths["response"])])
+    if companion_paths["verification"].is_file():
+        command.extend(["--verification", str(companion_paths["verification"])])
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        report.error("companion review contract validator returned invalid JSON")
+        return
+    if completed.returncode != 0 or not payload.get("ok"):
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            for message in errors:
+                report.error(f"review contract: {message}")
+        else:
+            report.error("companion review contract validation failed")
 
 
 def _validate_markdown_basis(project_root: Path, report: Report, final: bool) -> None:
@@ -2162,6 +2337,7 @@ def validate(project_root: Path, mode: str) -> Report:
             final,
         )
         _validate_technical_report(project_root, project, report, final)
+        _validate_review_artifacts(project_root, project, report, final)
         _validate_manifest(project_root, project, delivery_manifest, report, final)
         _validate_gates(project_root, project, report, final)
         _validate_markdown_basis(project_root, report, final)

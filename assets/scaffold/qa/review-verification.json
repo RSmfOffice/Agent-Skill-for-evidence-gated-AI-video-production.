@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "verification_review_id": null,
+  "prior_review_id": null,
+  "project_id": null,
+  "review_skill": {
+    "name": "video-review-evolution",
+    "version": "0.3.0",
+    "sha256": null
+  },
+  "reviewer": {
+    "id": null,
+    "kind": "cold-agent",
+    "reviewed_at": null,
+    "independent_from_producer": true
+  },
+  "change_request_ids": [],
+  "original_media_sha256": null,
+  "reviewed_media_sha256": null,
+  "media": {
+    "path": null,
+    "sha256": null
+  },
+  "regression_results": [],
+  "result": "not_applicable",
+  "limitations": []
+}

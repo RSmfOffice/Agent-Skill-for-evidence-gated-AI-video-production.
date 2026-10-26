@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add v0.4.0 project artifacts without overwriting existing work."""
+"""Add schema-v2 review artifacts without overwriting existing work."""
 
 from __future__ import annotations
 
@@ -12,8 +12,13 @@ from typing import Any
 
 from _common import (
     GATE_ORDER,
+    REVIEW_CONTRACT_SCHEMA_VERSION,
+    SKILL_ROOT,
+    SKILL_VERSION,
     ProjectError,
     load_json,
+    sha256_bytes,
+    sha256_file,
     utc_now,
     write_json_atomic,
 )
@@ -35,6 +40,77 @@ def copy_missing(project_root: Path, value: str) -> bool:
     return True
 
 
+def project_contract_hash(project_root: Path) -> str | None:
+    path = project_root / "project.json"
+    if not path.is_file():
+        return None
+    project = load_json(path)
+    if not isinstance(project, dict):
+        return None
+    project.pop("gates", None)
+    canonical = json.dumps(
+        project,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256_bytes(canonical)
+
+
+def upgrade_handoff(project_root: Path) -> bool:
+    path = project_root / "qa" / "review-handoff.json"
+    if not path.is_file():
+        return False
+    handoff = load_json(path)
+    if not isinstance(handoff, dict):
+        raise ProjectError("qa/review-handoff.json must contain an object")
+    original = json.dumps(handoff, ensure_ascii=False, sort_keys=True)
+    handoff["schema_version"] = REVIEW_CONTRACT_SCHEMA_VERSION
+    if not isinstance(handoff.get("created_at"), str) or not handoff.get("created_at"):
+        handoff["created_at"] = utc_now()
+    handoff.setdefault("generation_skill", {})
+    generation = handoff["generation_skill"]
+    if not isinstance(generation, dict):
+        generation = {}
+        handoff["generation_skill"] = generation
+    generation["name"] = "video-production-director"
+    generation["version"] = SKILL_VERSION
+    if not isinstance(generation.get("path"), str) or not generation.get("path"):
+        generation["path"] = str(SKILL_ROOT)
+    generation.setdefault("sha256", None)
+    handoff["review_skill_min_version"] = "0.3.0"
+    handoff.setdefault("review_scope", [])
+    handoff.setdefault("required_observations", [])
+    handoff.setdefault("intentional_choices", [])
+    handoff.setdefault("anchors", [])
+    handoff.setdefault("known_clean_controls", [])
+    handoff.setdefault("known_failure_controls", [])
+    handoff.setdefault("excluded_checks", [])
+
+    sources = handoff.get("sources")
+    if isinstance(sources, dict):
+        for role, value in list(sources.items()):
+            if isinstance(value, str):
+                value = {"path": value, "sha256": None}
+                sources[role] = value
+            if not isinstance(value, dict) or not isinstance(value.get("path"), str):
+                continue
+            source_path = project_root / value["path"]
+            if not source_path.is_file():
+                continue
+            if role == "project":
+                value["sha256"] = project_contract_hash(project_root)
+                value["hash_mode"] = "json-without-gates"
+            else:
+                value["sha256"] = sha256_file(source_path)
+                value.pop("hash_mode", None)
+    updated = json.dumps(handoff, ensure_ascii=False, sort_keys=True)
+    if updated != original:
+        write_json_atomic(path, handoff)
+        return True
+    return False
+
+
 def upgrade(project_root: Path) -> dict[str, Any]:
     project_file = project_root / "project.json"
     if not project_file.is_file():
@@ -50,9 +126,13 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         "timeline.json",
         "qa/animatic-review.json",
         "qa/review-handoff.json",
+        "qa/review-result.json",
+        "qa/change-response.json",
+        "qa/review-verification.json",
     ):
         if copy_missing(project_root, value):
             created.append(value)
+    handoff_upgraded = upgrade_handoff(project_root)
     (project_root / "animatic").mkdir(parents=True, exist_ok=True)
 
     output = project.get("output")
@@ -73,6 +153,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
     if not isinstance(policy, dict):
         policy = {}
     policy.setdefault("require_independent_review", True)
+    policy.setdefault("require_companion_review", True)
     project["policy"] = policy
     duration = output.get("duration_sec")
     clock = project.get("clock")
@@ -132,7 +213,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
             }
         ordered_gates[gate] = state
     project["gates"] = ordered_gates
-    project["upgraded_to"] = "0.4.0"
+    project["upgraded_to"] = SKILL_VERSION
     project["upgraded_at"] = utc_now()
     write_json_atomic(project_file, project)
 
@@ -157,6 +238,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         "status": "upgraded",
         "project": str(project_root),
         "created": created,
+        "review_handoff_upgraded": handoff_upgraded,
         "text_required": output["text_required"],
         "gate_count": len(ordered_gates),
         "requires_manual_review": True,

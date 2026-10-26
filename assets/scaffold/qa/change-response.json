@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "review_id": null,
+  "media_sha256": null,
+  "responses": [],
+  "new_project_revision": null,
+  "new_media_sha256": null,
+  "generation_skill_change": {
+    "changed": false,
+    "from_version": "0.5.0",
+    "to_version": "0.5.0"
+  },
+  "rule_changes": []
+}

@@ -4,7 +4,7 @@ description: Plan, generate, edit, review, and deliver high-quality AI, programm
 license: MIT
 metadata:
   short-description: Quality-first, evidence-gated video production
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # Video Production Director
@@ -69,8 +69,9 @@ small prompt request into a full production unless the user asks for it.
 12. **Hand off evidence, not just the file.** For standard or Hero review,
     provide the final media hash, stable anchors, declared intentional choices,
     generation context, and known-clean controls in `qa/review-handoff.json`.
-    When the companion review Skill is available, use its structured findings
-    and regression receipts to improve this production workflow.
+    When `policy.require_companion_review` is true, also require a matched
+    review result, generation response, and independent verification of any
+    changed bytes before release.
 
 ## Working workflow
 
@@ -241,11 +242,12 @@ observed, use the declared method, and use hashed evidence objects with a
 provenance role. Every blocking acceptance needs a passing check. Self-review
 cannot pass a project whose policy requires independent review.
 
-For a standard or Hero review, prefer `video-review-evolution` as the
-independent review side when it is available. Apply its
-`generation_change_requests` through the cheapest responsible layer, return
-`qa/change-response.json`, and do not claim a fix until the original failure,
-known-clean control, and declared negative examples pass.
+For a standard or Hero review with companion review enabled, use
+`video-review-evolution` as the independent review side. Apply its
+`generation_change_requests` through the cheapest responsible layer and return
+`qa/change-response.json`. Do not claim a fix until the review Skill validates
+the new media bytes in `qa/review-verification.json`, including the original
+failure, known-clean controls, negative examples, and declared holdout.
 
 For an image-only review pass, generate a contact-sheet overview:
 
@@ -325,13 +327,15 @@ unverifiable gate blocks release.
 - `qa/review-result.json`: structured findings and change requests returned by
   the review Skill.
 - `qa/change-response.json`: accepted/rejected changes and regression receipts.
+- `qa/review-verification.json`: independent validation of the changed media
+  bytes and required regression cases.
 - `delivery-manifest.json`: final files, hashes, roles, destination, and rights
   status.
 
 Read [references/artifacts.md](references/artifacts.md) when creating or
 repairing these files.
 
-For a project created with `0.1.0` through `0.3.0`, add missing artifacts and fields
+For a project created with `0.1.0` through `0.4.0`, add missing artifacts and fields
 without overwriting existing work:
 
 ```bash
@@ -357,6 +361,8 @@ Stop and request direction when:
 - only final-output frames support a preproduction identity or motion claim;
 - a signature event has no located evidence inside its declared time window;
 - required independent review is satisfied only by the producer;
+- companion review is configured but the matched review chain is missing,
+  stale, or internally inconsistent;
 - a Hero asset remains unlocked or fails its real-scene stress tests;
 - generation keeps failing from the same cause and the next remedy changes
   scope, cost, model, or creative direction;

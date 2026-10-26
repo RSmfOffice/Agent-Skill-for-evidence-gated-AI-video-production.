@@ -28,7 +28,8 @@ project directory.
 ├── qa/
 │   ├── review-handoff.json
 │   ├── review-result.json
-│   └── change-response.json
+│   ├── change-response.json
+│   └── review-verification.json
 ├── rights/
 ├── renders/
 └── delivery/
@@ -225,7 +226,7 @@ Regenerate it after any final-file change.
 
 ## qa/review-handoff.json
 
-Required for `standard` and `hero` review under Skill `0.4.0+`. It binds the
+Required for `standard` and `hero` review under Skill `0.5.0+`. It binds the
 exact reviewed media and gives an independent reviewer:
 
 - generation and review Skill versions;
@@ -239,6 +240,9 @@ exact reviewed media and gives an independent reviewer:
 - exclusions and unavailable checks.
 
 The full contract is in [review-handoff.md](review-handoff.md).
+`schema_version` is `2`. Source paths are project-relative and carry shared
+SHA-256 hashes; `project.json` uses `json-without-gates` so gate approvals do not
+invalidate the intent hash.
 
 ## qa/review-result.json
 
@@ -252,6 +256,14 @@ Produced by the generation side after a review. It maps every change request to
 `accepted`, `rejected`, or `deferred`, records the responsible layer and changed
 files/rules, preserves approved work, supplies the new media hash, and reports
 original-case, known-clean, negative-example, and residual-risk regression.
+
+## qa/review-verification.json
+
+Produced by a new independent review round after accepted changes. It binds the
+prior review, accepted request IDs, original and changed media hashes, reviewer
+independence, and all required regression results. A generation response alone
+is provisional; only a matching `review-verification.json` with
+`result: "validated"` closes the loop.
 
 ## timeline.md
 
@@ -334,7 +346,8 @@ previs      -> animatic/animatic.mp4, qa/animatic-technical-report.json,
 generation  -> generation-log.jsonl, shots.json
 edit        -> timeline.md, timeline.json
 review      -> qa-report.json, qa/technical-report.json,
-               qa/review-handoff.json, qa/review-result.json
+               qa/review-handoff.json, qa/review-result.json,
+               qa/change-response.json, qa/review-verification.json
 delivery    -> delivery-manifest.json
 ```
 

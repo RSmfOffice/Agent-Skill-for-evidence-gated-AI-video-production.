@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+
 GATE_ORDER = (
     "brief",
     "direction",
@@ -22,6 +24,10 @@ GATE_ORDER = (
     "review",
     "delivery",
 )
+
+SKILL_NAME = "video-production-director"
+SKILL_VERSION = "0.5.0"
+REVIEW_CONTRACT_SCHEMA_VERSION = 2
 
 DEFAULT_GATE_ARTIFACTS = {
     "brief": ("brief.md",),
@@ -42,6 +48,16 @@ DEFAULT_GATE_ARTIFACTS = {
     "review": ("qa-report.json", "qa/technical-report.json"),
     "delivery": ("delivery-manifest.json",),
 }
+
+MANDATORY_REVIEW_ARTIFACTS = (
+    "qa/review-handoff.json",
+)
+
+MANDATORY_COMPANION_REVIEW_ARTIFACTS = (
+    "qa/review-result.json",
+    "qa/change-response.json",
+    "qa/review-verification.json",
+)
 
 REQUIRED_PROJECT_FILES = (
     "project.json",
@@ -66,6 +82,19 @@ class ProjectError(Exception):
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def required_gate_artifacts(
+    project: dict[str, Any],
+    gate: str,
+) -> tuple[str, ...]:
+    artifacts = list(DEFAULT_GATE_ARTIFACTS[gate])
+    if gate == "review" and project.get("quality_mode") in {"standard", "hero"}:
+        artifacts.extend(MANDATORY_REVIEW_ARTIFACTS)
+        policy = project.get("policy")
+        if not isinstance(policy, dict) or policy.get("require_companion_review") is True:
+            artifacts.extend(MANDATORY_COMPANION_REVIEW_ARTIFACTS)
+    return tuple(dict.fromkeys(artifacts))
 
 
 def load_json(path: Path) -> Any:

@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 from _common import (
-    DEFAULT_GATE_ARTIFACTS,
     GATE_ORDER,
     ProjectError,
     load_json,
     project_path,
+    required_gate_artifacts,
     sha256_file,
     utc_now,
     write_json_atomic,
@@ -37,7 +37,9 @@ def approve(
         if not isinstance(previous_gate, dict) or previous_gate.get("status") != "approved":
             raise ProjectError(f"previous gate is not approved: {previous}")
 
-    artifact_values = custom_artifacts or list(DEFAULT_GATE_ARTIFACTS[gate])
+    artifact_values = custom_artifacts or list(
+        required_gate_artifacts(project, gate)
+    )
     if not artifact_values:
         raise ProjectError(f"no artifacts configured for gate: {gate}")
 

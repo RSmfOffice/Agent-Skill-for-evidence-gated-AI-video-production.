@@ -12,7 +12,7 @@ Codex environment.
 A quality-first Agent Skill for planning, generating, editing, reviewing, and
 delivering AI, programmatic, hybrid, or footage-based videos.
 
-Current Skill version: **0.4.0**.
+Current Skill version: **0.5.0**.
 
 Most prompt collections optimize one call. This skill maintains production
 memory across calls: creative direction, asset continuity, shot contracts,
@@ -48,6 +48,8 @@ final delivery.
 - Consumes structured review change requests and returns a regression receipt,
   enabling the generation and review Skills to improve each other without
   self-approval.
+- Requires independent verification of changed media bytes before an accepted
+  review fix can pass the release gate.
 
 ## Workflow
 
@@ -63,10 +65,11 @@ intake
   -> hash-bound review handoff
   -> technical + visual + editorial + rights review
   -> scoped review feedback and regression
+  -> independent verification of changed bytes
   -> delivery manifest
 ```
 
-The entry skill routes to six focused references:
+The entry skill routes to focused references:
 
 - `intake-and-quality.md`
 - `requirements-and-traceability.md`
@@ -94,7 +97,7 @@ npx skills add <owner>/<repository>
 
 Start a new Codex conversation after installation so the skill is rediscovered.
 
-### Upgrade from 0.1.0 through 0.3.0
+### Upgrade from 0.1.0 through 0.4.0
 
 Add new artifacts and fields without overwriting existing work:
 
@@ -196,7 +199,7 @@ project/
 | Script | Purpose |
 | --- | --- |
 | `init_project.py` | Create the stateful project scaffold |
-| `upgrade_project.py` | Add v0.4.0 review-handoff fields/artifacts and invalidate stale approvals |
+| `upgrade_project.py` | Add v0.5.0 review-contract artifacts and invalidate stale approvals |
 | `preflight.py` | Check Python, media tools, project state, and model profiles |
 | `validate_project.py` | Validate planning structure or enforce final release |
 | `approve_gate.py` | Hash stage artifacts and record explicit approval |

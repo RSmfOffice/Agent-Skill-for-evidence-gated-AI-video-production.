@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "review_id": null,
+  "project_id": null,
+  "review_skill": {
+    "name": "video-review-evolution",
+    "version": "0.3.0",
+    "sha256": null
+  },
+  "generation_skill": {
+    "name": "video-production-director",
+    "version": "0.5.0"
+  },
+  "reviewer": {
+    "id": null,
+    "kind": "cold-agent",
+    "reviewed_at": null,
+    "independent_from_producer": true
+  },
+  "media_sha256": null,
+  "coverage": {},
+  "coverage_reasons": {},
+  "verdict": "provisional",
+  "issues": [],
+  "generation_change_requests": [],
+  "residual_risks": [],
+  "limitations": [
+    "Fill this artifact only after independently inspecting the exact final media."
+  ]
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -11,7 +12,15 @@ from pathlib import Path
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT / "scripts"))
 
-from _common import ProjectError, load_json, sha256_file, write_json_atomic
+from _common import (
+    SKILL_ROOT as PRODUCTION_SKILL_ROOT,
+    ProjectError,
+    load_json,
+    sha256_file,
+    sha256_bytes,
+    utc_now,
+    write_json_atomic,
+)
 from approve_gate import approve
 from build_manifest import build_manifest
 from init_project import initialize
@@ -615,6 +624,195 @@ class ProjectStateTests(unittest.TestCase):
                 rights_verified=True,
             ),
         )
+        self.build_review_chain()
+
+    def build_review_chain(self) -> None:
+        project = load_json(self.root / "project.json")
+        shots = load_json(self.root / "shots.json")
+        shot = shots["shots"][0]
+        output = project["output"]
+        media_hash = sha256_file(self.root / output["path"])
+        review_scope = [
+            "technical",
+            "content",
+            "text",
+            "visual",
+            "motion",
+            "editorial",
+            "audio_visual",
+            "rights",
+        ]
+        source_paths = {
+            "brief": "brief.md",
+            "project": "project.json",
+            "shots": "shots.json",
+            "timeline": "timeline.json",
+            "qa_report": "qa-report.json",
+        }
+        handoff = {
+            "schema_version": 2,
+            "project_id": project["project_id"],
+            "created_at": utc_now(),
+            "generation_skill": {
+                "name": "video-production-director",
+                "version": "0.5.0",
+                "path": str(PRODUCTION_SKILL_ROOT),
+                "sha256": None,
+            },
+            "review_skill_min_version": "0.3.0",
+            "review_scope": review_scope,
+            "media": {
+                "path": output["path"],
+                "sha256": media_hash,
+                "duration_sec": output["duration_sec"],
+                "width": output["width"],
+                "height": output["height"],
+                "fps": output["fps"],
+                "has_audio": output["has_audio"],
+            },
+            "delivery": {
+                "platform": project["platform"],
+                "intended_size": [output["width"], output["height"]],
+                "quality_mode": project["quality_mode"],
+            },
+            "sources": self.review_sources(source_paths),
+            "required_observations": [
+                {
+                    "id": item["id"],
+                    "observable": item["observable"],
+                    "acceptance_ids": item["acceptance_ids"],
+                }
+                for item in project["content_contract"]["required"]
+            ],
+            "intentional_choices": [],
+            "anchors": [
+                {
+                    "id": f"SHOT-{shot['id']}",
+                    "kind": "shot",
+                    "start_sec": shot["start_sec"],
+                    "end_sec": shot["end_sec"],
+                }
+            ],
+            "control_context": {
+                "route": shot["generation"]["source"],
+                "model": shot["generation"]["model"] or "programmatic-renderer",
+                "prompt_or_source": "timeline.json",
+                "references": [],
+            },
+            "known_clean_controls": [],
+            "known_failure_controls": [],
+            "excluded_checks": [],
+            "notes": "State-test review handoff.",
+        }
+        self.write_json("qa/review-handoff.json", handoff)
+        review_id = "REV-STATE-TEST-001"
+        self.write_json(
+            "qa/review-result.json",
+            {
+                "schema_version": 2,
+                "review_id": review_id,
+                "project_id": project["project_id"],
+                "review_skill": {
+                    "name": "video-review-evolution",
+                    "version": "0.3.0",
+                    "sha256": None,
+                },
+                "generation_skill": {
+                    "name": "video-production-director",
+                    "version": "0.5.0",
+                },
+                "reviewer": {
+                    "id": "independent-reviewer",
+                    "kind": "cold-agent",
+                    "reviewed_at": utc_now(),
+                    "independent_from_producer": True,
+                },
+                "media_sha256": media_hash,
+                "coverage": {category: "pass" for category in review_scope},
+                "coverage_reasons": {},
+                "verdict": "pass",
+                "issues": [],
+                "generation_change_requests": [],
+                "residual_risks": [],
+                "limitations": [],
+            },
+        )
+
+        self.write_json(
+            "qa/change-response.json",
+            {
+                "schema_version": 2,
+                "review_id": review_id,
+                "media_sha256": media_hash,
+                "responses": [],
+                "new_project_revision": "state-test-v001",
+                "new_media_sha256": media_hash,
+                "generation_skill_change": {
+                    "changed": False,
+                    "from_version": "0.5.0",
+                    "to_version": "0.5.0",
+                },
+                "rule_changes": [],
+            },
+        )
+        self.write_json(
+            "qa/review-verification.json",
+            {
+                "schema_version": 2,
+                "verification_review_id": "REV-STATE-TEST-VERIFY-001",
+                "prior_review_id": review_id,
+                "project_id": project["project_id"],
+                "review_skill": {
+                    "name": "video-review-evolution",
+                    "version": "0.3.0",
+                    "sha256": None,
+                },
+                "reviewer": {
+                    "id": "independent-reviewer",
+                    "kind": "cold-agent",
+                    "reviewed_at": utc_now(),
+                    "independent_from_producer": True,
+                },
+                "change_request_ids": [],
+                "original_media_sha256": media_hash,
+                "reviewed_media_sha256": media_hash,
+                "media": {
+                    "path": output["path"],
+                    "sha256": media_hash,
+                },
+                "regression_results": [],
+                "result": "not_applicable",
+                "limitations": [],
+            },
+        )
+
+    def review_sources(
+        self,
+        source_paths: dict[str, str],
+    ) -> dict[str, dict[str, object]]:
+        sources: dict[str, dict[str, object]] = {}
+        for role, relative in source_paths.items():
+            path = self.root / relative
+            if role == "project":
+                project = load_json(path)
+                project.pop("gates", None)
+                canonical = json.dumps(
+                    project,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                sources[role] = {
+                    "path": relative,
+                    "sha256": sha256_bytes(canonical),
+                    "hash_mode": "json-without-gates",
+                }
+            else:
+                sources[role] = {
+                    "path": relative,
+                    "sha256": sha256_file(path),
+                }
+        return sources
 
     def approve_all(self) -> None:
         for gate in (
@@ -645,6 +843,50 @@ class ProjectStateTests(unittest.TestCase):
         self.approve_all()
         report = validate(self.root, "final")
         self.assertEqual([], report.errors, "\n".join(report.errors))
+
+    def test_blank_review_handoff_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        self.approve_all()
+        shutil.copy2(
+            PRODUCTION_SKILL_ROOT
+            / "assets"
+            / "scaffold"
+            / "qa"
+            / "review-handoff.json",
+            self.root / "qa" / "review-handoff.json",
+        )
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any(
+                "review handoff project_id must match" in item
+                for item in report.errors
+            ),
+            "\n".join(report.errors),
+        )
+
+    def test_missing_companion_review_result_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        self.approve_all()
+        (self.root / "qa" / "review-result.json").unlink()
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any(
+                "companion review is required" in item
+                for item in report.errors
+            ),
+            "\n".join(report.errors),
+        )
+
+    def test_review_result_project_mismatch_blocks_release(self) -> None:
+        self.build_releasable_fixture()
+        result = load_json(self.root / "qa" / "review-result.json")
+        result["project_id"] = "different-project"
+        self.write_json("qa/review-result.json", result)
+        report = validate(self.root, "final")
+        self.assertTrue(
+            any("project_id differs from handoff" in item for item in report.errors),
+            "\n".join(report.errors),
+        )
 
     def test_changed_creative_bible_makes_gate_stale(self) -> None:
         self.build_releasable_fixture()
@@ -736,7 +978,7 @@ class ProjectStateTests(unittest.TestCase):
         self.assertIn("script.md", result["created"])
         self.assertIn("script_clock", upgraded["gates"])
         self.assertFalse(upgraded["output"]["text_required"])
-        self.assertEqual("0.4.0", upgraded["upgraded_to"])
+        self.assertEqual("0.5.0", upgraded["upgraded_to"])
         self.assertIn("content_contract", upgraded)
         self.assertIn("motion_contracts", upgraded)
         self.assertTrue((self.root / "qa" / "review-handoff.json").is_file())
@@ -745,6 +987,29 @@ class ProjectStateTests(unittest.TestCase):
         self.assertTrue(
             any("content_contract needs at least one" in item for item in report.errors)
         )
+
+    def test_legacy_handoff_upgrade_changes_metadata_not_evidence(self) -> None:
+        self.build_releasable_fixture()
+        handoff = load_json(self.root / "qa" / "review-handoff.json")
+        handoff["schema_version"] = 1
+        handoff["generation_skill"]["version"] = "0.4.0"
+        handoff["sources"] = {
+            role: value["path"]
+            for role, value in handoff["sources"].items()
+        }
+        self.write_json("qa/review-handoff.json", handoff)
+
+        result = upgrade(self.root)
+        upgraded = load_json(self.root / "qa" / "review-handoff.json")
+
+        self.assertTrue(result["review_handoff_upgraded"])
+        self.assertEqual(2, upgraded["schema_version"])
+        self.assertEqual("0.5.0", upgraded["generation_skill"]["version"])
+        self.assertEqual(
+            "json-without-gates",
+            upgraded["sources"]["project"]["hash_mode"],
+        )
+        self.assertTrue(upgraded["required_observations"])
 
     def test_rate_parser(self) -> None:
         self.assertAlmostEqual(parse_rate("30000/1001"), 29.97002997, places=5)
