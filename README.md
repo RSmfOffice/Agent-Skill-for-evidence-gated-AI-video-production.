@@ -12,7 +12,7 @@ Codex environment.
 A quality-first Agent Skill for planning, generating, editing, reviewing, and
 delivering AI, programmatic, hybrid, or footage-based videos.
 
-Current Skill version: **0.3.0**.
+Current Skill version: **0.4.0**.
 
 Most prompt collections optimize one call. This skill maintains production
 memory across calls: creative direction, asset continuity, shot contracts,
@@ -42,6 +42,12 @@ final delivery.
 - Uses hashed stage approvals. Changing approved content invalidates the gate.
 - Requires native-resolution shot evidence and an actual full-file technical
   inspection before release.
+- Emits a hash-bound `qa/review-handoff.json` with stable anchors, generation
+  context, intentional effects, and known controls for an independent review
+  Skill.
+- Consumes structured review change requests and returns a regression receipt,
+  enabling the generation and review Skills to improve each other without
+  self-approval.
 
 ## Workflow
 
@@ -54,7 +60,9 @@ intake
   -> capability-based generation
   -> candidate selection
   -> edit, sound, graphics, grade
+  -> hash-bound review handoff
   -> technical + visual + editorial + rights review
+  -> scoped review feedback and regression
   -> delivery manifest
 ```
 
@@ -86,7 +94,7 @@ npx skills add <owner>/<repository>
 
 Start a new Codex conversation after installation so the skill is rediscovered.
 
-### Upgrade from 0.1.0 or 0.2.0
+### Upgrade from 0.1.0 through 0.3.0
 
 Add new artifacts and fields without overwriting existing work:
 
@@ -188,7 +196,7 @@ project/
 | Script | Purpose |
 | --- | --- |
 | `init_project.py` | Create the stateful project scaffold |
-| `upgrade_project.py` | Add v0.3.0 fields/artifacts and invalidate stale approvals |
+| `upgrade_project.py` | Add v0.4.0 review-handoff fields/artifacts and invalidate stale approvals |
 | `preflight.py` | Check Python, media tools, project state, and model profiles |
 | `validate_project.py` | Validate planning structure or enforce final release |
 | `approve_gate.py` | Hash stage artifacts and record explicit approval |

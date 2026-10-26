@@ -4,7 +4,7 @@ description: Plan, generate, edit, review, and deliver high-quality AI, programm
 license: MIT
 metadata:
   short-description: Quality-first, evidence-gated video production
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # Video Production Director
@@ -66,6 +66,11 @@ small prompt request into a full production unless the user asks for it.
    variable at a time and preserve approved work.
 11. **A render is not a release.** Separate structure, technical QC, visual
     review, editorial review, rights, and final delivery decisions.
+12. **Hand off evidence, not just the file.** For standard or Hero review,
+    provide the final media hash, stable anchors, declared intentional choices,
+    generation context, and known-clean controls in `qa/review-handoff.json`.
+    When the companion review Skill is available, use its structured findings
+    and regression receipts to improve this production workflow.
 
 ## Working workflow
 
@@ -201,6 +206,13 @@ Judge complete motion, not a single frame. Select against pre-registered
 criteria. Stop after repeated failures of the same cause and simplify the shot
 or change the responsible layer.
 
+After the selected final file is rendered, assemble
+`qa/review-handoff.json` and validate it with the review Skill's contract
+validator when available. Read
+[references/review-handoff.md](references/review-handoff.md). The handoff must
+bind the exact media bytes, stable shot/graphic anchors, intentional choices,
+current generation-Skill version, route/model context, and known controls.
+
 If the user authorizes multiple agents, read
 [parallel-production.md](references/parallel-production.md). Parallel work is
 optional and applies only after shot, asset, and output boundaries are stable.
@@ -228,6 +240,12 @@ QA checks must name the acceptance IDs they settle, state what was actually
 observed, use the declared method, and use hashed evidence objects with a
 provenance role. Every blocking acceptance needs a passing check. Self-review
 cannot pass a project whose policy requires independent review.
+
+For a standard or Hero review, prefer `video-review-evolution` as the
+independent review side when it is available. Apply its
+`generation_change_requests` through the cheapest responsible layer, return
+`qa/change-response.json`, and do not claim a fix until the original failure,
+known-clean control, and declared negative examples pass.
 
 For an image-only review pass, generate a contact-sheet overview:
 
@@ -302,13 +320,18 @@ unverifiable gate blocks release.
 - `generation-log.jsonl`: append-only candidate history.
 - `qa-report.json`: observed checks, findings, waivers, and verdict.
 - `qa/technical-report.json`: deterministic media facts produced by inspection.
+- `qa/review-handoff.json`: exact-byte review package, anchors, context, and
+  intentional choices for the companion review Skill.
+- `qa/review-result.json`: structured findings and change requests returned by
+  the review Skill.
+- `qa/change-response.json`: accepted/rejected changes and regression receipts.
 - `delivery-manifest.json`: final files, hashes, roles, destination, and rights
   status.
 
 Read [references/artifacts.md](references/artifacts.md) when creating or
 repairing these files.
 
-For a project created with `0.1.0` or `0.2.0`, add missing artifacts and fields
+For a project created with `0.1.0` through `0.3.0`, add missing artifacts and fields
 without overwriting existing work:
 
 ```bash

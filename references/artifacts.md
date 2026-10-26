@@ -26,6 +26,9 @@ project directory.
 ├── selects/
 ├── animatic/
 ├── qa/
+│   ├── review-handoff.json
+│   ├── review-result.json
+│   └── change-response.json
 ├── rights/
 ├── renders/
 └── delivery/
@@ -220,6 +223,36 @@ comparisons, full-decode status, sampled frames, observations, and file hash.
 
 Regenerate it after any final-file change.
 
+## qa/review-handoff.json
+
+Required for `standard` and `hero` review under Skill `0.4.0+`. It binds the
+exact reviewed media and gives an independent reviewer:
+
+- generation and review Skill versions;
+- final media path and SHA-256;
+- delivery size, platform, and quality mode;
+- stable shot, graphic, event, and deliberate-effect anchors;
+- required observations and linked acceptance;
+- intentional choices with allowed effects and must-preserve items;
+- route, model, prompt/source, and reference context;
+- known-clean and known-failure controls;
+- exclusions and unavailable checks.
+
+The full contract is in [review-handoff.md](review-handoff.md).
+
+## qa/review-result.json
+
+Produced by the review side. It contains coverage statuses, evidence-bound
+issues, intentional-overlap judgments, generation change requests, limitations,
+and residual risks. It must bind the same media hash as the handoff.
+
+## qa/change-response.json
+
+Produced by the generation side after a review. It maps every change request to
+`accepted`, `rejected`, or `deferred`, records the responsible layer and changed
+files/rules, preserves approved work, supplies the new media hash, and reports
+original-case, known-clean, negative-example, and residual-risk regression.
+
 ## timeline.md
 
 The edit contract:
@@ -300,7 +333,8 @@ previs      -> animatic/animatic.mp4, qa/animatic-technical-report.json,
                timeline.md, timeline.json
 generation  -> generation-log.jsonl, shots.json
 edit        -> timeline.md, timeline.json
-review      -> qa-report.json, qa/technical-report.json
+review      -> qa-report.json, qa/technical-report.json,
+               qa/review-handoff.json, qa/review-result.json
 delivery    -> delivery-manifest.json
 ```
 

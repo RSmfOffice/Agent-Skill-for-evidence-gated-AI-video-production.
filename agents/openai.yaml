@@ -1,8 +1,8 @@
 interface:
   display_name: "Video Production Director"
-  short_description: "Quality-first, evidence-gated AI video production"
+  short_description: "Evidence-gated video production with review feedback"
   brand_color: "#0F766E"
-  default_prompt: "Use $video-production-director to turn this brief into a high-quality, evidence-gated video production plan."
+  default_prompt: "Use $video-production-director to produce an evidence-gated video and a hash-bound review handoff that can improve the workflow through independent review."
 
 policy:
   allow_implicit_invocation: true

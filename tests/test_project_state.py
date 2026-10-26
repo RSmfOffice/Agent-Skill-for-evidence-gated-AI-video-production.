@@ -736,9 +736,10 @@ class ProjectStateTests(unittest.TestCase):
         self.assertIn("script.md", result["created"])
         self.assertIn("script_clock", upgraded["gates"])
         self.assertFalse(upgraded["output"]["text_required"])
-        self.assertEqual("0.3.0", upgraded["upgraded_to"])
+        self.assertEqual("0.4.0", upgraded["upgraded_to"])
         self.assertIn("content_contract", upgraded)
         self.assertIn("motion_contracts", upgraded)
+        self.assertTrue((self.root / "qa" / "review-handoff.json").is_file())
         self.assertTrue(result["requires_manual_review"])
         report = validate(self.root, "final")
         self.assertTrue(

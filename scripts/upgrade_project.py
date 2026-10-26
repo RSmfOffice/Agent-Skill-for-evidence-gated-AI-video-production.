@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add v0.3.0 project artifacts without overwriting existing work."""
+"""Add v0.4.0 project artifacts without overwriting existing work."""
 
 from __future__ import annotations
 
@@ -49,6 +49,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
         "master-clock.json",
         "timeline.json",
         "qa/animatic-review.json",
+        "qa/review-handoff.json",
     ):
         if copy_missing(project_root, value):
             created.append(value)
@@ -131,7 +132,7 @@ def upgrade(project_root: Path) -> dict[str, Any]:
             }
         ordered_gates[gate] = state
     project["gates"] = ordered_gates
-    project["upgraded_to"] = "0.3.0"
+    project["upgraded_to"] = "0.4.0"
     project["upgraded_at"] = utc_now()
     write_json_atomic(project_file, project)
 

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "project_id": null,
+  "created_at": null,
+  "generation_skill": {
+    "name": "video-production-director",
+    "version": "0.4.0",
+    "path": null,
+    "sha256": null
+  },
+  "review_skill_min_version": "0.2.0",
+  "review_scope": [
+    "technical",
+    "content",
+    "text",
+    "visual",
+    "motion",
+    "editorial",
+    "audio_visual",
+    "rights"
+  ],
+  "media": {
+    "path": "renders/final.mp4",
+    "sha256": null,
+    "duration_sec": null,
+    "width": null,
+    "height": null,
+    "fps": null,
+    "has_audio": null
+  },
+  "delivery": {
+    "platform": null,
+    "intended_size": null,
+    "quality_mode": null
+  },
+  "sources": {
+    "brief": "brief.md",
+    "project": "project.json",
+    "shots": "shots.json",
+    "timeline": "timeline.json",
+    "qa_report": "qa-report.json"
+  },
+  "required_observations": [],
+  "intentional_choices": [],
+  "anchors": [],
+  "control_context": {
+    "route": null,
+    "model": null,
+    "prompt_or_source": null,
+    "references": []
+  },
+  "known_clean_controls": [],
+  "known_failure_controls": [],
+  "excluded_checks": [],
+  "notes": "Fill every field before external review. Never use an animatic or proxy hash as media.sha256."
+}
